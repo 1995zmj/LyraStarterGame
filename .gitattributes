@@ -1,0 +1,14 @@
+# 默认按文本处理，CRLF 交给各平台
+* text=auto
+
+# Unreal 资源是二进制，禁止做行尾/差异处理
+*.uasset binary
+*.umap binary
+*.upk binary
+*.udk binary
+*.pak binary
+*.ubulk binary
+*.uexp binary
+
+# 超过 GitHub 单文件 100 MB 上限的资源，交给 Git LFS 托管
+Content/Effects/Textures/Flipbooks/SmokeSwirl_3_Flipbook_CHANNELPACK.uasset filter=lfs diff=lfs merge=lfs -text

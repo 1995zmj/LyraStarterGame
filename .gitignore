@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------
+# Unreal Engine (Lyra Starter Game) — 版本控制忽略规则
+# 原则：只跟踪源码与资源（Source / Config / Build / Content / *.uproject），
+#       不跟踪任何可再生的编译产物与本地缓存。
+# ---------------------------------------------------------------
+
+# --- 引擎生成 / 编译产物（任意层级，包括 Plugins 下） ---
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+Build/Receipts/
+
+# --- Visual Studio / Rider / IDE ---
+.vs/
+.idea/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+ipch/
+.vscode/
+
+# --- 构建脚本的中间产物 ---
+Build/Scripts/obj/
+Build/Scripts/uatobj/
+
+# --- 调试符号 / 日志 / 转储 ---
+*.pdb
+*.log
+*.dmp
+*.mdf
+*.ldf
+*.bak
+*.tmp
+
+# --- 本地资源收集（每台机器不同） ---
+Content/Collections/
+
+# --- 操作系统杂项 ---
+Thumbs.db
+Desktop.ini
+.DS_Store
