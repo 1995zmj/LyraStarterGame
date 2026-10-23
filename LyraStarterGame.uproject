@@ -385,6 +385,14 @@
 		{
 			"Name": "PlatformDLC",
 			"Enabled": true
+		},
+		{
+			"Name": "Terminal",
+			"Enabled": true
+		},
+		{
+			"Name": "ModelContextProtocol",
+			"Enabled": true
 		}
 	],
 	"EpicSampleNameHash": "451731683"
