@@ -14,7 +14,9 @@ Build/Receipts/
 # --- Visual Studio / Rider / IDE ---
 .vs/
 .idea/
+.vsconfig
 *.sln
+*.slnx
 *.suo
 *.user
 *.userosscache
@@ -29,6 +31,8 @@ ipch/
 # --- 构建脚本的中间产物 ---
 Build/Scripts/obj/
 Build/Scripts/uatobj/
+# 本机生成的引擎路径（每台机器不同；Lyra.Automation.csproj 会按需导入）
+Build/Scripts/*.csproj.props
 
 # --- 调试符号 / 日志 / 转储 ---
 *.pdb
