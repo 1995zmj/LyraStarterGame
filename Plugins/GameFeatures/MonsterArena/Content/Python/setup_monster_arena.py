@@ -4,6 +4,8 @@ Creates MonsterArena assets and scopes shared relay registration to shooter
 experiences. Existing Blueprint graphs and custom experience actions are preserved.
 """
 import unreal
+import runpy
+from pathlib import Path
 
 unreal.load_module("MonsterArenaRuntime")
 unreal.load_module("MonsterArenaEditor")
@@ -156,4 +158,7 @@ playlist.set_editor_property("tile_title", "Monster Arena")
 playlist.set_editor_property("tile_sub_title", "Shoot monsters. Level up. Get stronger.")
 playlist.set_editor_property("max_player_count", 2)
 assets.save_loaded_asset(playlist)
+
+# Restore CSV-authored progression binding after experience configuration.
+runpy.run_path(str(Path(__file__).with_name("import_progression_csv.py")), run_name="__main__")
 unreal.log("MONSTER_ARENA_SETUP_SUCCEEDED")

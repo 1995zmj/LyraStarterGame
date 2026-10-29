@@ -9,6 +9,35 @@
 #include "GameFramework/WorldSettings.h"
 #include "UObject/UnrealType.h"
 #include "GameFeatureData.h"
+#include "RunProgressionComponent.h"
+
+bool UMonsterArenaContentLibrary::BindProgression(ULyraExperienceDefinition* Experience, TSubclassOf<UActorComponent> ComponentClass)
+{
+	if (!Experience || !ComponentClass || !ComponentClass->IsChildOf(URunProgressionComponent::StaticClass())) { return false; }
+	FGameFeatureComponentEntry* Match = nullptr;
+	UGameFeatureAction_AddComponents* Owner = nullptr;
+	for (UGameFeatureAction* Action : Experience->Actions)
+	{
+		if (auto* Components = Cast<UGameFeatureAction_AddComponents>(Action))
+		{
+			for (auto& Entry : Components->ComponentList)
+			{
+				UClass* Existing = Entry.ComponentClass.LoadSynchronous();
+				if (Existing && Existing->IsChildOf(URunProgressionComponent::StaticClass()))
+				{
+					if (Match) { return false; }
+					Match = &Entry;
+					Owner = Components;
+				}
+			}
+		}
+	}
+	if (!Match) { return false; }
+	Experience->Modify();
+	Owner->Modify();
+	Match->ComponentClass = ComponentClass.Get();
+	return true;
+}
 
 void UMonsterArenaContentLibrary::ConfigureWorld(UWorld* World)
 {

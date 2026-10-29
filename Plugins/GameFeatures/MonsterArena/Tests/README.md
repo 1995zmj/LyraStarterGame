@@ -11,7 +11,9 @@
 | `../Source/MonsterArenaRuntime/Private/Tests/MonsterArenaLifecycleTest.cpp` | 真实怪物击杀与自动复活，检查已选永久奖励、未选候选和即时奖励不重复发放 |
 | `../Source/MonsterArenaEditor/Private/Tests/MonsterArenaRewardTestLibrary.h/.cpp` | 启停真实 PIE、枚举 PIE World、施加正常 GAS 伤害、查询输入锁和伤害免疫状态的 Editor 测试桥接 |
 | `Python/validate_monster_arena_editor.py` | Editor 模块和 Python 配置接口校验 |
+| `Python/validate_csv_configuration.py` | CSV 重复导入、每条行为资产值、配置引用、等级断档／负经验／重复 ID／未知行为／悬空卡牌引用／空行为／非法数值和合计越界校验；使用 Editor 配置校验的命令行入口替换脚本路径 |
 | `Python/validate_reward_multiplayer.py` | 两名玩家的监听服务器／客户端 PIE 选卡、复制和界面生命周期回归 |
+| `Python/kill_accumulation_cases.py` | 由双人回归入口调用：使用导入的火力积累卡验证怪物／玩家击杀、重复通知、叠卡、队友／自杀排除、复活、复制和新对局清零 |
 | `Python/preview_reward_ui.py` | 保持编辑器运行的单人选卡界面预览，供真实鼠标、键盘、手柄和画面验收 |
 | [ACCEPTANCE.md](ACCEPTANCE.md) | 实际验收证据、结果及未完成项 |
 
@@ -26,6 +28,8 @@
 `-MonsterArenaSmokeTest` 覆盖实际步枪伤害效果、经验溢出、等级上限和显式选卡后的强化；升到 3 级时先检查有两次待选机会且属性未自动增加，再执行选择。它同时调用 `RunMonsterArenaRewardChoiceTests()`，无需额外启动参数。
 
 选卡专项覆盖同轮去重、关闭重开不刷新、重复／伪造／旧对局请求不发奖、治疗和备用弹药、满血治疗过滤、叠层限制、空池兜底、保留其他系统的输入阻断，以及始终不暂停游戏。
+
+行为列表回归还覆盖单卡六条行为（含重复伤害）、持续效果先于治疗结算、治疗使用新生命上限、补弹不重放、未知行为拒绝以及重复弹药的精度越界。双人 PIE 比较服务端和客户端的完整候选行为与已领取行为列表。
 
 | 启动参数 | 完成时的成功标记 |
 | --- | --- |
@@ -74,6 +78,8 @@ Runtime C++ 测试及调用入口受 `WITH_DEV_AUTOMATION_TESTS` 保护。当前
 ```
 
 该入口异步启动一个有渲染的 PIE 玩家，等待角色、成长组件和 HUD 就绪后只增加一次 325 经验，得到三次待选机会，界面仍保持关闭。出现 `MONSTER_ARENA_REWARD_UI_PREVIEW_READY` 后，默认按 `U` 或手柄上方向键打开界面，检查排版、焦点、确认、关闭重开，以及按住开火时打开／关闭的行为。项目中的 `K` 是自毁调试快捷键，不作为默认选卡键。准备完成后卸载回调，编辑器和 PIE 持续运行；通过编辑器的正常停止入口结束预览。
+
+追加 `-MonsterArenaAccumulationPreview` 时，仅在临时 PIE 配置中把卡池限制为 CSV 导入的“火力积累”，用于实际键鼠验证叠卡预览和 HUD 收益。不会改动已保存资产。多人测试修改队伍时只允许已注册的 1／2 红蓝队，测试桥接拒绝不存在的队伍，避免非法前置条件触发姓名板空材质。
 
 为了给画面与输入验收保留稳定环境，脚本仅在当前 PIE World 临时禁用刷怪并移除已有怪物，不保存资源，也不赋予无敌。此入口不覆盖选卡期间的战斗危险性、怪物攻击或多人复制；这些行为应由上面的双人回归及正常战斗试玩另行验证。`READY` 只代表预览准备成功，不能作为交互验收通过标记。
 

@@ -3,9 +3,32 @@
 #include "Engine/DataAsset.h"
 #include "RunRewardCardDefinition.generated.h"
 
-/** A server-resolved card snapshot. The same values are displayed and granted. */
+/** Adding a behavior requires runtime handling, but never another CSV column. */
+UENUM(BlueprintType)
+enum class ERunRewardBehavior : uint8
+{
+	MaxHealthBonus,
+	DamageBonus,
+	HealAmount,
+	HealFraction,
+	SpareAmmo,
+	DamagePerKill
+};
+
 USTRUCT(BlueprintType)
-struct FRunRewardOption
+struct FRunRewardAction
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	ERunRewardBehavior Behavior = ERunRewardBehavior::DamageBonus;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0"))
+	float Value = 0.0f;
+};
+
+/** A server-resolved card snapshot. The same actions are displayed and granted. */
+USTRUCT(BlueprintType)
+struct MONSTERARENARUNTIME_API FRunRewardOption
 {
 	GENERATED_BODY()
 
@@ -15,16 +38,11 @@ struct FRunRewardOption
 	FText Title;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (MultiLine = true))
 	FText Description;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0"))
-	float MaxHealthBonus = 0.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0"))
-	float DamageBonus = 0.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0"))
-	float HealAmount = 0.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0", ClampMax = "1"))
-	float HealFraction = 0.0f;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0"))
-	int32 SpareAmmo = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (TitleProperty = "Behavior"))
+	TArray<FRunRewardAction> Actions;
+
+	float GetMagnitude(ERunRewardBehavior Behavior) const;
+	bool IsValid() const;
 };
 
 USTRUCT(BlueprintType)

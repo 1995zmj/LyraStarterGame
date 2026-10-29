@@ -86,7 +86,7 @@ void AArenaMonster::HandleOutOfHealth(AActor* InstigatorActor, AActor* Causer, c
 	{
 		if (URunProgressionComponent* Progress = Player->FindComponentByClass<URunProgressionComponent>())
 		{
-			Progress->RecordMonsterKill(ExperienceReward);
+			Progress->RecordMonsterKill(this, ExperienceReward);
 		}
 	}
 	HealthComponent->StartDeath();

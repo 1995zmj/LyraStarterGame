@@ -90,8 +90,8 @@ bool RunMonsterArenaRewardChoiceTests(ALyraPlayerState* Player)
 	const FRunRewardOption ChosenCard = Progress->State.Options[0];
 	Progress->RequestSelectReward(FirstRun, FirstOffer, ChosenCard.CardId);
 	Verify(Progress->State.PendingChoices == 1 && Progress->State.ChosenRewards.Num() == 1
-		&& FMath::IsNearlyEqual(ASC->GetNumericAttribute(ULyraHealthSet::GetMaxHealthAttribute()), BaseMaxHealth + ChosenCard.MaxHealthBonus)
-		&& FMath::IsNearlyEqual(ASC->GetNumericAttribute(ULyraCombatSet::GetBaseDamageAttribute()), BaseDamage + ChosenCard.DamageBonus),
+		&& FMath::IsNearlyEqual(ASC->GetNumericAttribute(ULyraHealthSet::GetMaxHealthAttribute()), BaseMaxHealth + ChosenCard.GetMagnitude(ERunRewardBehavior::MaxHealthBonus))
+		&& FMath::IsNearlyEqual(ASC->GetNumericAttribute(ULyraCombatSet::GetBaseDamageAttribute()), BaseDamage + ChosenCard.GetMagnitude(ERunRewardBehavior::DamageBonus)),
 		TEXT("Confirmed card applies its exact permanent bonuses and consumes one chance"));
 	Progress->RequestSelectReward(FirstRun, FirstOffer, ChosenCard.CardId);
 	Verify(Progress->State.PendingChoices == 1 && Progress->State.ChosenRewards.Num() == 1,
@@ -153,6 +153,34 @@ bool RunMonsterArenaRewardChoiceTests(ALyraPlayerState* Player)
 		Verify(Item->GetStatTagStackCount(Spare) == 7, TEXT("Periodic reward maintenance does not refill reserve ammo"));
 		Item->RemoveStatTagStack(Spare, Item->GetStatTagStackCount(Spare));
 		Item->AddStatTagStack(Spare, OriginalSpare);
+
+		Progress->ResetRun();
+		FRunRewardCardEntry Combined = Card(TEXT("TestCombined"));
+		// Deliberately place healing before max health in source order.
+		Combined.Option.Actions = {
+			{ERunRewardBehavior::HealFraction, 0.25f},
+			{ERunRewardBehavior::HealAmount, 5.0f},
+			{ERunRewardBehavior::DamageBonus, 2.0f},
+			{ERunRewardBehavior::MaxHealthBonus, 20.0f},
+			{ERunRewardBehavior::DamageBonus, 3.0f},
+			{ERunRewardBehavior::SpareAmmo, 12.0f}};
+		Progress->Definition->RewardPool->Cards = {Combined};
+		ASC->SetNumericAttributeBase(ULyraHealthSet::GetHealthAttribute(), 10.0f);
+		Progress->AddExperience(60);
+		Verify(Select(Progress, TEXT("TestCombined")), TEXT("One card grants six configured behavior records"));
+		Verify(FMath::IsNearlyEqual(ASC->GetNumericAttribute(ULyraCombatSet::GetBaseDamageAttribute()), BaseDamage + 5.0f)
+			&& FMath::IsNearlyEqual(ASC->GetNumericAttribute(ULyraHealthSet::GetMaxHealthAttribute()), BaseMaxHealth + 20.0f)
+			&& FMath::IsNearlyEqual(ASC->GetNumericAttribute(ULyraHealthSet::GetHealthAttribute()), 15.0f + (BaseMaxHealth + 20.0f) * 0.25f)
+			&& Item->GetStatTagStackCount(Spare) == OriginalSpare + 12,
+			TEXT("Repeated damage adds together and healing uses the new maximum before supplying ammo"));
+		Progress->TickComponent(0.2f, LEVELTICK_All, nullptr);
+		Verify(Item->GetStatTagStackCount(Spare) == OriginalSpare + 12,
+			TEXT("Combined card maintenance does not repeat instant rewards"));
+		Item->RemoveStatTagStack(Spare, 12);
+		Combined.Option.Actions.Add({static_cast<ERunRewardBehavior>(255), 1.0f});
+		Verify(!Combined.Option.IsValid(), TEXT("Unknown behaviors invalidate the whole card"));
+		Combined.Option.Actions = {{ERunRewardBehavior::SpareAmmo, 16777216.0f}, {ERunRewardBehavior::SpareAmmo, 1.0f}};
+		Verify(!Combined.Option.IsValid(), TEXT("Repeated ammo cannot exceed the exact integer range through rounding"));
 	}
 
 	// A limited pool is valid and must not deadlock the selection queue when its card is exhausted.

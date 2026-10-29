@@ -256,16 +256,22 @@ void UMonsterArenaRewardScreen::RefreshChoices()
 		}
 		CardStacks[Index]->SetText(FText::Format(LOCTEXT("Stacks", "本局已选 {0} 次"), FText::AsNumber(StackCount)));
 		FString Preview;
-		if (ASC && Card.DamageBonus > 0.0f)
+		if (ASC && Card.GetMagnitude(ERunRewardBehavior::DamageBonus) > 0.0f)
 		{
 			const float Damage = ASC->GetNumericAttribute(ULyraCombatSet::GetBaseDamageAttribute());
-			Preview += FText::Format(LOCTEXT("DamagePreview", "伤害加成 {0} → {1}"), FText::AsNumber(Damage), FText::AsNumber(Damage + Card.DamageBonus)).ToString();
+			Preview += FText::Format(LOCTEXT("DamagePreview", "伤害加成 {0} → {1}"), FText::AsNumber(Damage), FText::AsNumber(Damage + Card.GetMagnitude(ERunRewardBehavior::DamageBonus))).ToString();
 		}
-		if (ASC && Card.MaxHealthBonus > 0.0f)
+		if (ASC && Card.GetMagnitude(ERunRewardBehavior::MaxHealthBonus) > 0.0f)
 		{
 			if (!Preview.IsEmpty()) { Preview += TEXT("\n"); }
 			const float Health = ASC->GetNumericAttribute(ULyraHealthSet::GetMaxHealthAttribute());
-			Preview += FText::Format(LOCTEXT("HealthPreview", "生命上限 {0} → {1}"), FText::AsNumber(Health), FText::AsNumber(Health + Card.MaxHealthBonus)).ToString();
+			Preview += FText::Format(LOCTEXT("HealthPreview", "生命上限 {0} → {1}"), FText::AsNumber(Health), FText::AsNumber(Health + Card.GetMagnitude(ERunRewardBehavior::MaxHealthBonus))).ToString();
+		}
+		if (Card.GetMagnitude(ERunRewardBehavior::DamagePerKill) > 0.0f)
+		{
+			if (!Preview.IsEmpty()) { Preview += TEXT("\n"); }
+			const float Rate = Progression->GetDamagePerKill();
+			Preview += FText::Format(LOCTEXT("KillDamagePreview", "每次击杀伤害收益 {0} → {1}\n本局已累积 +{2}"), FText::AsNumber(Rate), FText::AsNumber(Rate + Card.GetMagnitude(ERunRewardBehavior::DamagePerKill)), FText::AsNumber(State.AccumulatedKillDamage)).ToString();
 		}
 		CardPreviews[Index]->SetText(FText::FromString(Preview));
 	}

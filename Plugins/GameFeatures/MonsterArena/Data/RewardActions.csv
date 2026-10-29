@@ -1,0 +1,10 @@
+CardId,Behavior,Value
+Firepower,DamageBonus,3
+Vitality,MaxHealthBonus,20
+Vitality,HealAmount,20
+Balance,MaxHealthBonus,10
+Balance,DamageBonus,1
+Balance,HealAmount,10
+FieldMedicine,HealFraction,0.4
+AmmoSupply,SpareAmmo,60
+FirepowerAccumulation,DamagePerKill,1

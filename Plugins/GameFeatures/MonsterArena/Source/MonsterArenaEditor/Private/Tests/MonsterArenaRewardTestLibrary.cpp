@@ -1,6 +1,11 @@
 #include "MonsterArenaRewardTestLibrary.h"
 
 #include "ArenaMeleeDamageEffect.h"
+#include "ArenaMonster.h"
+#include "AbilitySystemGlobals.h"
+#include "AbilitySystem/Attributes/LyraCombatSet.h"
+#include "Messages/LyraVerbMessage.h"
+#include "Teams/LyraTeamSubsystem.h"
 #include "CoreGlobals.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -136,4 +141,79 @@ bool UMonsterArenaRewardTestLibrary::IsDamageImmune(APawn* Pawn)
 	const ALyraPlayerState* Player = Pawn ? Pawn->GetPlayerState<ALyraPlayerState>() : nullptr;
 	const ULyraAbilitySystemComponent* ASC = Player ? Player->GetLyraAbilitySystemComponent() : nullptr;
 	return !ASC || ASC->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(TEXT("Gameplay.DamageImmunity")));
+}
+
+// Test-only damage uses normal GAS health/death callbacks and source attribution.
+bool UMonsterArenaRewardTestLibrary::DealAttributedDamage(APawn* Source, APawn* Target, float Amount)
+{
+	ALyraPlayerState* Player = Source ? Source->GetPlayerState<ALyraPlayerState>() : nullptr;
+	ULyraAbilitySystemComponent* ASC = Player ? Player->GetLyraAbilitySystemComponent() : nullptr;
+	UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
+	if (!ASC || !TargetASC || !Source->HasAuthority() || !Target->HasAuthority() || Amount <= 0)
+	{
+		return false;
+	}
+	TGuardValue<bool> RestoreGameplayCallspace(GAllowActorScriptExecutionInEditor, false);
+	FGameplayEffectSpecHandle Spec = ASC->MakeOutgoingSpec(UArenaMeleeDamageEffect::StaticClass(), 1.0f, ASC->MakeEffectContext());
+	Spec.Data->SetSetByCallerMagnitude(TAG_MonsterArena_MeleeDamage, Amount);
+	ASC->ApplyGameplayEffectSpecToTarget(*Spec.Data.Get(), TargetASC);
+	return true;
+}
+
+bool UMonsterArenaRewardTestLibrary::KillTestMonster(APawn* Source)
+{
+	if (!Source || !Source->HasAuthority()) { return false; }
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AArenaMonster* Monster = Source->GetWorld()->SpawnActor<AArenaMonster>(AArenaMonster::StaticClass(), Source->GetActorLocation() + FVector(500, 0, 0), FRotator::ZeroRotator, Params);
+	if (!Monster) { return false; }
+	Monster->SetActorTickEnabled(false);
+	const bool bApplied = DealAttributedDamage(Source, Monster, 10000.0f);
+	URunProgressionComponent* Progress = Source->GetPlayerState()->FindComponentByClass<URunProgressionComponent>();
+	const int32 Kills = Progress->State.Kills;
+	// Duplicate settlement must not increment XP, kill count or accumulated damage.
+	const float Accumulated = Progress->State.AccumulatedKillDamage;
+	Progress->RecordMonsterKill(Monster, Monster->ExperienceReward);
+	const bool bOnce = Progress->State.Kills == Kills && Progress->State.AccumulatedKillDamage == Accumulated;
+	Monster->Destroy();
+	return bApplied && bOnce;
+}
+
+bool UMonsterArenaRewardTestLibrary::UseAccumulationPool(URunProgressionComponent* Progression)
+{
+	if (!Progression || !Progression->GetOwner()->HasAuthority() || !Progression->Definition || !Progression->Definition->RewardPool) { return false; }
+	const FRunRewardCardEntry* Entry = Progression->Definition->RewardPool->Cards.FindByPredicate([](const FRunRewardCardEntry& Card) { return Card.Option.CardId == TEXT("FirepowerAccumulation"); });
+	if (!Entry) { return false; }
+	const FRunRewardCardEntry Copy = *Entry;
+	Progression->Definition = DuplicateObject<URunProgressionDefinition>(Progression->Definition, Progression);
+	Progression->Definition->RewardPool = NewObject<URunRewardPoolDefinition>(Progression->Definition);
+	Progression->Definition->RewardPool->Cards = {Copy};
+	return true;
+}
+
+bool UMonsterArenaRewardTestLibrary::SetTestTeam(APawn* Pawn, int32 Team)
+{
+	if (!Pawn || !Pawn->HasAuthority())
+	{
+		return false;
+	}
+	ULyraTeamSubsystem* Teams = Pawn->GetWorld()->GetSubsystem<ULyraTeamSubsystem>();
+	return Teams && Teams->DoesTeamExist(Team) && Teams->ChangeTeamForActor(Pawn->GetPlayerState(), Team);
+}
+
+void UMonsterArenaRewardTestLibrary::RepeatElimination(APawn* Source, APawn* Target)
+{
+	if (!Source || !Target || !Source->HasAuthority()) { return; }
+	FLyraVerbMessage Message;
+	Message.Verb = FGameplayTag::RequestGameplayTag(TEXT("Lyra.Elimination.Message"));
+	Message.Instigator = Source->GetPlayerState();
+	Message.Target = Target->GetPlayerState();
+	UGameplayMessageSubsystem::Get(Source).BroadcastMessage(Message.Verb, Message);
+}
+
+float UMonsterArenaRewardTestLibrary::GetBaseDamage(APawn* Pawn)
+{
+	const ALyraPlayerState* Player = Pawn ? Pawn->GetPlayerState<ALyraPlayerState>() : nullptr;
+	const ULyraAbilitySystemComponent* ASC = Player ? Player->GetLyraAbilitySystemComponent() : nullptr;
+	return ASC ? ASC->GetNumericAttribute(ULyraCombatSet::GetBaseDamageAttribute()) : -1.0f;
 }

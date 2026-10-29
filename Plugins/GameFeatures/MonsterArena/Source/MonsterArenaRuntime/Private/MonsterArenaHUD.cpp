@@ -204,6 +204,10 @@ void UMonsterArenaHUD::RefreshProgression()
 	const FRunProgressionState& State = BoundProgression->State;
 	const int32 Required = BoundProgression->GetExperienceRequired();
 	Status->SetText(FText::Format(LOCTEXT("Status", "等级 {0}  |  经验 {1}/{2}  |  击杀 {3}"), FText::AsNumber(State.Level), FText::AsNumber(State.Experience), FText::AsNumber(Required), FText::AsNumber(State.Kills)));
+	if (BoundProgression->GetDamagePerKill() > 0.0f)
+	{
+		Status->SetText(FText::Format(LOCTEXT("StatusAccumulation", "{0}\n火力积累：每次击杀 +{1}  |  已累积伤害 +{2}"), Status->GetText(), FText::AsNumber(BoundProgression->GetDamagePerKill()), FText::AsNumber(State.AccumulatedKillDamage)));
+	}
 	ExperienceBar->SetPercent(Required > 0 ? float(State.Experience) / Required : 1.0f);
 	if (State.Level > LastLevel) { NotificationRemaining = 5.0f; }
 	LastLevel = State.Level;

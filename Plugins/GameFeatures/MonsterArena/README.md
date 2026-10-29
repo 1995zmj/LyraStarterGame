@@ -19,6 +19,8 @@
 
 ## 默认卡池与配置
 
+当前玩法已绑定由 CSV 导入的配置资产。修改 `Data/Levels.csv` 和 `Data/RewardCards.csv` 后运行导入器；字段与操作步骤见 [CSV 配置说明](Data/README.md)。
+
 | 卡牌 ID | 名称 | 效果 |
 | --- | --- | --- |
 | `Firepower` | 火力强化 | 本局基础伤害 +3 |

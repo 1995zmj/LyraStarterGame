@@ -4,10 +4,13 @@
 #include "ActiveGameplayEffectHandle.h"
 #include "Engine/DataAsset.h"
 #include "RunRewardCardDefinition.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
 #include "RunProgressionComponent.generated.h"
 
 class ULyraAbilitySystemComponent;
 class ULyraInventoryItemInstance;
+struct FLyraVerbMessage;
+class AArenaMonster;
 
 USTRUCT(BlueprintType)
 struct FRunRewardGrant
@@ -34,6 +37,9 @@ struct FRunProgressionState
 	int32 Experience = 0;
 	UPROPERTY(BlueprintReadOnly)
 	int32 Kills = 0;
+	/** Damage earned after claiming DamagePerKill; survives pawn replacement. */
+	UPROPERTY(BlueprintReadOnly)
+	float AccumulatedKillDamage = 0.0f;
 	UPROPERTY(BlueprintReadOnly)
 	int32 RunId = 1;
 	UPROPERTY(BlueprintReadOnly)
@@ -55,7 +61,7 @@ class MONSTERARENARUNTIME_API URunProgressionDefinition : public UDataAsset
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Progression")
 	TArray<int32> ExperiencePerLevel = {60, 100, 140, 180, 220, 260, 300, 340, 380};
-	/** Leave empty to use MonsterArena's five native cards. */
+	/** Leave empty to use MonsterArena's native cards. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rewards")
 	TObjectPtr<URunRewardPoolDefinition> RewardPool;
 
@@ -91,7 +97,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void AddExperience(int32 Amount);
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-	void RecordMonsterKill(int32 ExperienceReward);
+	void RecordMonsterKill(AArenaMonster* Victim, int32 ExperienceReward);
+	UFUNCTION(BlueprintPure)
+	float GetDamagePerKill() const;
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void ResetRun();
 	UFUNCTION(BlueprintPure)
@@ -122,6 +130,12 @@ private:
 	bool ApplyPersistentReward(const FRunRewardOption& Card, TArray<FActiveGameplayEffectHandle>& OutHandles);
 	bool RefreshRewards();
 	void RemoveRewards();
+	void OnEliminationMessage(FGameplayTag Channel, const FLyraVerbMessage& Message);
+	void CreditKill(AActor* Victim, int32 ExperienceReward);
+	FGameplayMessageListenerHandle EliminationListener;
+	TSet<TWeakObjectPtr<AActor>> CreditedVictims;
+	FActiveGameplayEffectHandle KillDamageHandle;
+	float AppliedKillDamage = 0.0f;
 	TWeakObjectPtr<ULyraAbilitySystemComponent> RewardASC;
 	TWeakObjectPtr<APawn> RewardAvatar;
 	TArray<FActiveGameplayEffectHandle> RewardHandles;

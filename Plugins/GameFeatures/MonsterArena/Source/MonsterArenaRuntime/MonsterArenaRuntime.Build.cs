@@ -5,7 +5,7 @@ public class MonsterArenaRuntime : ModuleRules
 	public MonsterArenaRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-		PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "LyraGame", "GameplayAbilities", "GameplayTags", "GameplayTasks", "ModularGameplay", "AIModule", "UMG", "CommonUI", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "LyraGame", "GameplayAbilities", "GameplayTags", "GameplayMessageRuntime", "GameplayTasks", "ModularGameplay", "AIModule", "UMG", "CommonUI", "EnhancedInput" });
 		PrivateDependencyModuleNames.AddRange(new[] { "Slate", "SlateCore", "NetCore", "CommonGame", "InputCore" });
 	}
 }

@@ -25,6 +25,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Tests")
 	static bool DealDamage(APawn* Pawn, float Amount);
+	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Tests")
+	static bool DealAttributedDamage(APawn* Source, APawn* Target, float Amount);
+	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Tests")
+	static bool KillTestMonster(APawn* Source);
+	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Tests")
+	static bool UseAccumulationPool(URunProgressionComponent* Progression);
+	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Tests")
+	static bool SetTestTeam(APawn* Pawn, int32 Team);
+	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Tests")
+	static void RepeatElimination(APawn* Source, APawn* Target);
+	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
+	static float GetBaseDamage(APawn* Pawn);
 
 	/** Dispatches normal gameplay entry points without Python's editor-only RPC callspace override. */
 	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Tests")

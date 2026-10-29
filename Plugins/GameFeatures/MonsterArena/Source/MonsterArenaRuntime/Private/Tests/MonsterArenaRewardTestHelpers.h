@@ -12,11 +12,26 @@ inline FRunRewardCardEntry Card(FName Id, float MaxHealth = 0.0f, float Damage =
 	FRunRewardCardEntry Entry;
 	Entry.Option.CardId = Id;
 	Entry.Option.Title = FText::FromName(Id);
-	Entry.Option.MaxHealthBonus = MaxHealth;
-	Entry.Option.DamageBonus = Damage;
-	Entry.Option.HealAmount = Heal;
-	Entry.Option.HealFraction = HealFraction;
-	Entry.Option.SpareAmmo = SpareAmmo;
+	if (MaxHealth > 0)
+	{
+		Entry.Option.Actions.Add({ERunRewardBehavior::MaxHealthBonus, float(MaxHealth)});
+	}
+	if (Damage > 0)
+	{
+		Entry.Option.Actions.Add({ERunRewardBehavior::DamageBonus, float(Damage)});
+	}
+	if (Heal > 0)
+	{
+		Entry.Option.Actions.Add({ERunRewardBehavior::HealAmount, float(Heal)});
+	}
+	if (HealFraction > 0)
+	{
+		Entry.Option.Actions.Add({ERunRewardBehavior::HealFraction, float(HealFraction)});
+	}
+	if (SpareAmmo > 0)
+	{
+		Entry.Option.Actions.Add({ERunRewardBehavior::SpareAmmo, float(SpareAmmo)});
+	}
 	return Entry;
 }
 

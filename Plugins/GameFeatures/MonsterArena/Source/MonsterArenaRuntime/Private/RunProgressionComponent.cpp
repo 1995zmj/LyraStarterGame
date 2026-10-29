@@ -10,6 +10,10 @@
 #include "Inventory/LyraInventoryManagerComponent.h"
 #include "GameplayEffect.h"
 #include "RunRewardEffects.h"
+#include "ArenaMonster.h"
+#include "Messages/LyraVerbMessage.h"
+#include "Messages/LyraVerbMessageHelpers.h"
+#include "Teams/LyraTeamSubsystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Player/LyraPlayerState.h"
 
@@ -19,13 +23,7 @@ namespace
 {
 	bool IsValidCard(const FRunRewardOption& Card)
 	{
-		return !Card.CardId.IsNone()
-			&& FMath::IsFinite(Card.MaxHealthBonus) && Card.MaxHealthBonus >= 0.0f
-			&& FMath::IsFinite(Card.DamageBonus) && Card.DamageBonus >= 0.0f
-			&& FMath::IsFinite(Card.HealAmount) && Card.HealAmount >= 0.0f
-			&& FMath::IsFinite(Card.HealFraction) && Card.HealFraction >= 0.0f && Card.HealFraction <= 1.0f
-			&& Card.SpareAmmo >= 0
-			&& (Card.MaxHealthBonus > 0.0f || Card.DamageBonus > 0.0f || Card.HealAmount > 0.0f || Card.HealFraction > 0.0f || Card.SpareAmmo > 0);
+		return Card.IsValid();
 	}
 }
 
@@ -45,6 +43,10 @@ URunProgressionComponent::URunProgressionComponent(const FObjectInitializer& Obj
 void URunProgressionComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	if (GetOwner()->HasAuthority())
+	{
+		EliminationListener = UGameplayMessageSubsystem::Get(this).RegisterListener(FGameplayTag::RequestGameplayTag(TEXT("Lyra.Elimination.Message")), this, &ThisClass::OnEliminationMessage);
+	}
 	if (!Definition)
 	{
 		Definition = NewObject<URunProgressionDefinition>(this);
@@ -80,14 +82,57 @@ void URunProgressionComponent::AddExperience(int32 Amount)
 	NotifyStateChanged();
 }
 
-void URunProgressionComponent::RecordMonsterKill(int32 ExperienceReward)
+float URunProgressionComponent::GetDamagePerKill() const
 {
-	if (GetOwner() && GetOwner()->HasAuthority())
+	double Total = 0.0;
+	for (const FRunRewardGrant& Grant : State.ChosenRewards)
 	{
-		++State.Kills;
-		AddExperience(ExperienceReward);
-		NotifyStateChanged();
+		Total += Grant.Card.GetMagnitude(ERunRewardBehavior::DamagePerKill);
 	}
+	return float(FMath::Min(Total, 16777216.0));
+}
+
+void URunProgressionComponent::RecordMonsterKill(AArenaMonster* Victim, int32 ExperienceReward)
+{
+	CreditKill(Victim, ExperienceReward);
+}
+
+void URunProgressionComponent::OnEliminationMessage(FGameplayTag Channel, const FLyraVerbMessage& Message)
+{
+	if (!GetOwner()->HasAuthority() || ULyraVerbMessageHelpers::GetPlayerStateFromObject(Message.Instigator) != GetOwner())
+	{
+		return;
+	}
+	ALyraPlayerState* Victim = Cast<ALyraPlayerState>(Message.Target);
+	const ULyraTeamSubsystem* Teams = GetWorld()->GetSubsystem<ULyraTeamSubsystem>();
+	if (!Victim || Victim == GetOwner() || !Teams || Teams->CompareTeams(GetOwner(), Victim) != ELyraTeamComparison::DifferentTeams)
+	{
+		return;
+	}
+	// Deduplicate by dying pawn so a later respawn can award another kill.
+	CreditKill(Victim->GetPawn(), 0);
+}
+
+void URunProgressionComponent::CreditKill(AActor* Victim, int32 ExperienceReward)
+{
+	const ULyraHealthComponent* Health = ULyraHealthComponent::FindHealthComponent(Victim);
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !IsValid(Victim) || !Health || Health->GetHealth() > 0.0f || CreditedVictims.Contains(Victim))
+	{
+		return;
+	}
+	for (auto It = CreditedVictims.CreateIterator(); It; ++It)
+	{
+		if (!It->IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+	CreditedVictims.Add(Victim);
+	State.Kills = int32(FMath::Min(int64(State.Kills) + 1, int64(MAX_int32)));
+	State.AccumulatedKillDamage = float(FMath::Min(double(State.AccumulatedKillDamage) + GetDamagePerKill(), 16777216.0));
+	RefreshRewards();
+	AddExperience(ExperienceReward);
+	NotifyStateChanged();
 }
 
 void URunProgressionComponent::ResetRun()
@@ -217,15 +262,15 @@ bool URunProgressionComponent::IsCardApplicable(const FRunRewardOption& Card) co
 	{
 		return false;
 	}
-	if (Card.SpareAmmo > 0)
+	if (Card.GetMagnitude(ERunRewardBehavior::SpareAmmo) > 0)
 	{
 		const ULyraInventoryItemInstance* Item = FindRifleItem();
-		if (!Item || int64(Item->GetStatTagStackCount(FGameplayTag::RequestGameplayTag(TEXT("Lyra.ShooterGame.Weapon.SpareAmmo")))) + Card.SpareAmmo > MAX_int32)
+		if (!Item || int64(Item->GetStatTagStackCount(FGameplayTag::RequestGameplayTag(TEXT("Lyra.ShooterGame.Weapon.SpareAmmo")))) + int64(Card.GetMagnitude(ERunRewardBehavior::SpareAmmo)) > MAX_int32)
 		{
 			return false;
 		}
 	}
-	const bool bOnlyHealing = Card.MaxHealthBonus == 0.0f && Card.DamageBonus == 0.0f && Card.SpareAmmo == 0;
+	const bool bOnlyHealing = Card.GetMagnitude(ERunRewardBehavior::MaxHealthBonus) == 0.0f && Card.GetMagnitude(ERunRewardBehavior::DamageBonus) == 0.0f && Card.GetMagnitude(ERunRewardBehavior::SpareAmmo) == 0 && Card.GetMagnitude(ERunRewardBehavior::DamagePerKill) == 0.0f;
 	if (bOnlyHealing)
 	{
 		const ALyraPlayerState* Player = Cast<ALyraPlayerState>(GetOwner());
@@ -266,7 +311,7 @@ void URunProgressionComponent::GenerateOffer()
 		Fallback.Option.CardId = TEXT("FallbackFirepower");
 		Fallback.Option.Title = LOCTEXT("FallbackTitle", "基础火力强化");
 		Fallback.Option.Description = LOCTEXT("FallbackDescription", "本局基础伤害 +3");
-		Fallback.Option.DamageBonus = 3.0f;
+		Fallback.Option.Actions.Add({ERunRewardBehavior::DamageBonus, 3.0f});
 		Eligible.Add(Fallback);
 	}
 	while (State.Options.Num() < 3 && !Eligible.IsEmpty())
@@ -308,8 +353,8 @@ void URunProgressionComponent::ServerSelectReward_Implementation(int32 RunId, in
 	}
 	TGuardValue<bool> ResolveGuard(bResolvingChoice, true);
 	const FRunRewardOption Card = *Found;
-	ULyraInventoryItemInstance* RifleItem = Card.SpareAmmo > 0 ? FindRifleItem() : nullptr;
-	if (Card.SpareAmmo > 0 && !RifleItem)
+	ULyraInventoryItemInstance* RifleItem = Card.GetMagnitude(ERunRewardBehavior::SpareAmmo) > 0 ? FindRifleItem() : nullptr;
+	if (Card.GetMagnitude(ERunRewardBehavior::SpareAmmo) > 0 && !RifleItem)
 	{
 		ClientRewardRequestFailed(LOCTEXT("RifleUnavailable", "步枪尚未就绪，选卡次数已保留。"));
 		return;
@@ -327,15 +372,15 @@ void URunProgressionComponent::ServerSelectReward_Implementation(int32 RunId, in
 	}
 	// All fallible prerequisites were checked before applying permanent or instant rewards.
 	ULyraAbilitySystemComponent* ASC = RewardASC.Get();
-	if (Card.HealAmount > 0.0f || Card.HealFraction > 0.0f)
+	if (Card.GetMagnitude(ERunRewardBehavior::HealAmount) > 0.0f || Card.GetMagnitude(ERunRewardBehavior::HealFraction) > 0.0f)
 	{
 		const float MaxHealth = ASC->GetNumericAttribute(ULyraHealthSet::GetMaxHealthAttribute());
 		const float Health = ASC->GetNumericAttribute(ULyraHealthSet::GetHealthAttribute());
-		ASC->SetNumericAttributeBase(ULyraHealthSet::GetHealthAttribute(), FMath::Min(Health + Card.HealAmount + MaxHealth * Card.HealFraction, MaxHealth));
+		ASC->SetNumericAttributeBase(ULyraHealthSet::GetHealthAttribute(), FMath::Min(Health + Card.GetMagnitude(ERunRewardBehavior::HealAmount) + MaxHealth * Card.GetMagnitude(ERunRewardBehavior::HealFraction), MaxHealth));
 	}
-	if (Card.SpareAmmo > 0)
+	if (Card.GetMagnitude(ERunRewardBehavior::SpareAmmo) > 0)
 	{
-		RifleItem->AddStatTagStack(FGameplayTag::RequestGameplayTag(TEXT("Lyra.ShooterGame.Weapon.SpareAmmo")), Card.SpareAmmo);
+		RifleItem->AddStatTagStack(FGameplayTag::RequestGameplayTag(TEXT("Lyra.ShooterGame.Weapon.SpareAmmo")), int32(Card.GetMagnitude(ERunRewardBehavior::SpareAmmo)));
 	}
 	FRunRewardGrant& Grant = State.ChosenRewards.AddDefaulted_GetRef();
 	Grant.OfferId = OfferId;
@@ -414,7 +459,7 @@ bool URunProgressionComponent::ApplyPersistentReward(const FRunRewardOption& Car
 		OutHandles.Add(Handle);
 		return true;
 	};
-	if (!Apply(URunHealthRewardEffect::StaticClass(), Card.MaxHealthBonus) || !Apply(URunDamageRewardEffect::StaticClass(), Card.DamageBonus))
+	if (!Apply(URunHealthRewardEffect::StaticClass(), Card.GetMagnitude(ERunRewardBehavior::MaxHealthBonus)) || !Apply(URunDamageRewardEffect::StaticClass(), Card.GetMagnitude(ERunRewardBehavior::DamageBonus)))
 	{
 		for (const FActiveGameplayEffectHandle Handle : OutHandles)
 		{
@@ -459,6 +504,30 @@ bool URunProgressionComponent::RefreshRewards()
 		RewardHandles.Append(NewHandles);
 		++AppliedRewardCount;
 	}
+	if (State.AccumulatedKillDamage > 0.0f)
+	{
+		if (!KillDamageHandle.IsValid())
+		{
+			FRunRewardOption Accumulated;
+			Accumulated.Actions.Add({ERunRewardBehavior::DamageBonus, State.AccumulatedKillDamage});
+			TArray<FActiveGameplayEffectHandle> Handles;
+			if (ApplyPersistentReward(Accumulated, Handles) && Handles.Num() == 1)
+			{
+				KillDamageHandle = Handles[0];
+				RewardHandles.Append(Handles);
+				AppliedKillDamage = State.AccumulatedKillDamage;
+			}
+			else
+			{
+				bAllRewardsApplied = false;
+			}
+		}
+		else if (AppliedKillDamage != State.AccumulatedKillDamage)
+		{
+			ASC->UpdateActiveGameplayEffectSetByCallerMagnitude(KillDamageHandle, FGameplayTag::RequestGameplayTag(TEXT("MonsterArena.Reward.Magnitude")), State.AccumulatedKillDamage);
+			AppliedKillDamage = State.AccumulatedKillDamage;
+		}
+	}
 	if (bRebuildRewards)
 	{
 		// Rebuilding missing effects can temporarily lower MaxHealth. Restore only
@@ -482,6 +551,8 @@ void URunProgressionComponent::RemoveRewards()
 			ASC->RemoveActiveGameplayEffect(Handle);
 		}
 	}
+	KillDamageHandle.Invalidate();
+	AppliedKillDamage = 0.0f;
 	RewardHandles.Reset();
 	RewardASC.Reset();
 	RewardAvatar.Reset();
@@ -495,6 +566,7 @@ void URunProgressionComponent::EndPlay(const EEndPlayReason::Type Reason)
 		SetRewardMenuOpen(false);
 		RemoveRewards();
 	}
+	EliminationListener.Unregister();
 	Super::EndPlay(Reason);
 }
 

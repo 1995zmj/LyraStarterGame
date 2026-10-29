@@ -16,6 +16,7 @@ library = unreal.MonsterArenaRewardTestLibrary
 started = time.monotonic()
 finished = False
 experience_granted = False
+accumulation_preview = "-MonsterArenaAccumulationPreview" in unreal.SystemLibrary.get_command_line()
 
 
 def prepare_if_ready():
@@ -64,6 +65,8 @@ def prepare_if_ready():
     global experience_granted
     if not experience_granted:
         experience_granted = True
+        if accumulation_preview:
+            assert library.use_accumulation_pool(progress)
         progress.add_experience(325)
     assert not hud.is_reward_menu_open(), "Upgrading must not automatically open the menu"
     assert progress.get_editor_property("state").pending_choices == 3, "Expected three pending selections"

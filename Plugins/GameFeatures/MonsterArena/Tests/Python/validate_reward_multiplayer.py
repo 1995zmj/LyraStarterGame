@@ -77,6 +77,8 @@ def run_rewards():
     other_player = next(p for p in server_players if p != server_player)
     remote_replica = next(p for p in players(client) if p != client_player)
     authority = progression(server_player)
+    check(authority.get_class().get_name() == "B_MonsterArenaProgression_C", "Experience injects the CSV-configured component")
+    check(authority.get_editor_property("definition").get_path_name() == "/MonsterArena/Data/DA_MonsterArenaProgression.DA_MonsterArenaProgression", "Live player reads the imported progression asset")
     other = progression(other_player)
     owner = progression(client_player)
     unreal.log("RewardNetwork ownership: server=" + server_player.get_path_name() + " client=" + client_player.get_path_name())
@@ -115,6 +117,9 @@ def run_rewards():
     offer_id = state(owner).offer_id
     run_id = state(owner).run_id
     check(len(set(ids)) == 3, "Offered cards are unique")
+    def action_snapshot(card):
+        return [(action.behavior, action.value) for action in card.actions]
+    check([action_snapshot(card) for card in state(owner).options] == [action_snapshot(card) for card in state(authority).options], "Complete behavior lists replicate with the offer")
     check(not unreal.GameplayStatics.is_game_paused(server) and not unreal.GameplayStatics.is_game_paused(client), "Neither world is paused")
     before_time = unreal.GameplayStatics.get_time_seconds(server)
     yield from delay(1.0)
@@ -138,6 +143,7 @@ def run_rewards():
     unreal.log("RewardNetwork progression objects: authority=" + authority.get_path_name() + " owner=" + owner.get_path_name())
     yield from wait_for(lambda: len(state(owner).chosen_rewards) == 1, "Client reward ledger has arrived")
     check(len(state(authority).chosen_rewards) == 1 and len(state(owner).chosen_rewards) == 1, "Reward ledger replicates to its owner")
+    check(action_snapshot(state(owner).chosen_rewards[0].card) == action_snapshot(state(authority).chosen_rewards[0].card), "Granted behavior lists replicate with the reward ledger")
     check(state(other).pending_choices == 2 and not state(other).chosen_rewards, "Other player's rewards are unaffected")
     library.request_card(owner, run_id, offer_id, ids[0])
     yield from delay(0.5)
@@ -163,7 +169,7 @@ def run_rewards():
     for remaining in (1, 0):
         # The offer survives death unchanged. A healing-only card may now be
         # inapplicable at full health, so select a permanent/supply alternative.
-        index = next(i for i, card in enumerate(state(owner).options) if card.max_health_bonus > 0 or card.damage_bonus > 0 or card.spare_ammo > 0)
+        index = next(i for i, card in enumerate(state(owner).options) if any(action.behavior in (unreal.RunRewardBehavior.MAX_HEALTH_BONUS, unreal.RunRewardBehavior.DAMAGE_BONUS, unreal.RunRewardBehavior.SPARE_AMMO, unreal.RunRewardBehavior.DAMAGE_PER_KILL) for action in card.actions))
         library.select_and_confirm_reward(hud.get_reward_screen(), index)
         yield from wait_for(lambda: state(owner).pending_choices == remaining, "Consumed one selection, remaining=" + str(remaining))
         yield from delay(0.3)
@@ -176,6 +182,10 @@ def run_rewards():
     library.request_card(owner, run_id, saved_offer, saved_ids[0])
     yield from delay(0.3)
     check(not state(authority).chosen_rewards and state(authority).pending_choices == 0, "Old-run client request cannot grant a reward")
+    import runpy
+    cases = runpy.run_path(os.path.join(unreal.Paths.project_plugins_dir(), "GameFeatures/MonsterArena/Tests/Python/kill_accumulation_cases.py"))
+    yield from cases["run"](authority, owner, server_player, client_player, other_player, hud, library, check, wait_for, delay)
+
 
 
 def run():

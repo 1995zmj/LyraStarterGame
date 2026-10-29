@@ -11,6 +11,8 @@ class MONSTERARENAEDITOR_API UMonsterArenaContentLibrary : public UBlueprintFunc
 	GENERATED_BODY()
 public:
 	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Setup")
+	static bool BindProgression(ULyraExperienceDefinition* Experience, TSubclassOf<UActorComponent> ComponentClass);
+	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Setup")
 	static void ConfigureExperience(ULyraExperienceDefinition* Experience);
 	UFUNCTION(BlueprintCallable, Category = "MonsterArena|Setup")
 	static void ConfigureWorld(UWorld* World);

@@ -1,0 +1,7 @@
+CardId,Title,Description,Weight,MinimumLevel,MaxStacks
+Firepower,火力强化,本局基础伤害 +3,1,2,0
+Vitality,体魄强化,最大生命 +20；立即恢复 20 生命,1,2,0
+Balance,均衡成长,基础伤害 +1；最大生命 +10；立即恢复 10 生命,1,2,0
+FieldMedicine,战地医疗,立即恢复最大生命值的 40%,1,2,0
+AmmoSupply,弹药补给,步枪备用弹药 +60；仍需正常换弹,1,2,0
+FirepowerAccumulation,火力积累,每击杀一个怪物或敌方玩家，本局基础伤害 +1,1,2,0

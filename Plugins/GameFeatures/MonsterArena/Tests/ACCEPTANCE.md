@@ -1,6 +1,45 @@
 # MonsterArena 验收记录
 
-日期：2026-10-29，时区 Asia/Shanghai。
+更新日期：2026-10-30，时区 Asia/Shanghai。以下按轮次保留历史结果。
+
+## 火力积累与继续验收（2026-10-30）
+
+实现：`DamagePerKill` 行为和 `FirepowerAccumulation` CSV 卡牌已接入。领取后，服务端按最终击杀者给怪物／敌方玩家击杀发放累积伤害；叠卡提高未来收益，既有击杀不追溯，队友／自杀／非致命伤害不计，按死亡 Pawn 去重。同局复活保留，新对局清零。使用一个持续 GameplayEffect 更新合计值，避免每次击杀新增永久效果；候选、收益和累积值复制到持有者。HUD 与选卡预览显示收益。
+
+| 验收项目 | 方法与实际结果 |
+| --- | --- |
+| 编译 | `LyraEditor Win64 Development` 成功；测试桥接属于 MonsterArenaEditor，Runtime 没有新增 Editor 依赖 |
+| CSV 与资产 | `MonsterArenaAccumulationImportR2.log`：包含第六张卡的导入、重复导入和非法数据检查通过；退出码 0，0 Error／Warning |
+| 双人实际运行 | `MonsterArenaAccumulationNetworkR3.log`：93 项通过，`MONSTER_ARENA_REWARD_NETWORK_SUCCEEDED`；正常结束两个 PIE World 和编辑器。覆盖领取前不追溯、单卡 +1、双卡 +2、怪物与敌方玩家死亡、重复通知、实际基础伤害及 owner 复制、队友／自杀排除、非致命伤害不发奖、同一敌人复活后再次计入、持有者复活保留及新局清零 |
+| 姓名板空引用根因 | R2 测试错误地把玩家改为未注册队伍 0。只读检查 `/Game/UI/Indicators/W_Nameplate` 图表确认其血条材质选择器 Option 0 为空，1／2 才有红蓝材质。修正测试使用注册队伍 1／2，并让 `SetTestTeam` 拒绝未注册 ID；新增拒绝队伍 0 的断言。未修改共享姓名板资产，也未禁用姓名板或日志；R3 的 Blueprint Runtime Error、LogScript Warning、Traceback 均为 0 |
+| 真实键鼠与画面 | `MonsterArenaAccumulationVisualR2.log` 对应单人预览，使用 computer-use 实际输入并观察画面：升级保留三次选择且不自动开窗；U 打开；鼠标选卡与确认；HUD 每杀 +1、待选 3→2；U 关闭重开保留；数字键 1 与回车确认第二、第三张；预览 1→2、2→3，HUD 每杀 +2、+3；最后一次领取自动关闭，无待选时 U 不再打开 |
+| 返回战斗 | 真实关闭选卡后点击开火，弹匣 30→29；释放后多轮截图仍为 29，没有继续开火扣弹。该检查不等同于按住射击时打开菜单的持续输入测试 |
+| 退出与日志 | 预览和编辑器均通过正常窗口退出结束；本轮没有保存临时预览世界或测试卡池。保留失败日志和原日志，没有清日志或降低等级 |
+
+完整双人 R3 日志仍有 **1 Error、15 Warning**：PixelStreaming2RTC 启动 `GEngine is not valid` 错误 1；音频采样率转换 6、MCP 许可提示 1、出生蒙太奇播放失败 6、网络连通性 HTTP 超时 2。单人 Visual R2 为 **1 Error、7 Warning**：同一 PixelStreaming2 错误；音频 4、MCP 1、HTTP 超时 2。两者 Fatal／Ensure／断言／蓝图异常／脚本警告为 0。单人开火还观察到屏幕上的 `LyraGameState0 does not have a MusicManager` 提示；没有将此轮称为全项目无报错。
+
+当前结论：火力积累功能回归和本轮键鼠选卡验收通过，姓名板异常已通过修正测试前置条件消除。**项目整体无报错验收仍未通过**，上述启动／出生表现等问题保留。未执行手柄实机、按住开火时切换菜单、焦点切换、独立专用服务器、断线／丢包／高延迟、正式打包；本轮视觉预览不刷怪，非零累积值由双人自动化检查验证。本轮未提交 Git。
+
+## 卡牌行为列表与 CSV 拆表（2026-10-29）
+
+- 卡牌元数据保留在 `Data/RewardCards.csv`，每条行为放在 `Data/RewardActions.csv`（CardId、Behavior、Value）。原有五张卡全部迁移；Runtime 快照、候选复制、领取记录、预览和默认卡池改用 `Actions` 数组。资源通过 Unreal 导入器重新保存，没有手工修改二进制。
+- `LyraEditor Win64 Development` 编译成功，`git diff --check` 通过；Runtime 没有新增 Editor 依赖。
+- `MonsterArenaActionsImport.log`：重复导入、逐条行为值及资产绑定检查通过；11 组非法输入拒绝，以及同类行为多行配置检查通过。退出码 0，完整日志 0 Error、0 Warning、0 Fatal／Ensure／断言／脚本警告。
+- `MonsterArenaActionsSmokeR2.log`：最终数值精度修正后，实际击杀／升级／选卡通过。新增六行为组合卡验证重复伤害合计、生命上限先结算、固定与比例治疗、备用弹药；未知行为与合计超出 float 连续整数范围会拒绝。退出码 0，选卡专项和 Smoke 成功标记均存在。
+- `MonsterArenaActionsLifecycle.log`：实际两次死亡复活回归通过，持续效果保留，已领取即时治疗和弹药不重复发放；退出码 0。
+- `MonsterArenaActionsNetwork.log`：有渲染的监听服务器／客户端 PIE **48 项通过**，新增候选及已领取记录的完整行为列表一致性检查。日志正常关闭，结构化结果 `passed=true`。随后仅修正行为合计的浮点边界，并在最终 Smoke R2 回归；未重复执行整个多人流程。
+- 完整日志仍非无报错：双人日志 1 Error（PixelStreaming2RTC 启动）、11 Warning（音频 6、MCP 许可 1、出生蒙太奇 4）；无 Fatal、Ensure、断言或蓝图／脚本异常。无渲染独立运行 Smoke R2 有 71 Error／325 Warning，Lifecycle 有 71 Error／378 Warning，包含实验性编辑器工具初始化失败与 Python 反射类型缺失；各自另有 4／56 条 LogScript Warning（Niagara 返回空、无音频倒计时空引用）。这些是此前相同测试方式已记录的问题，并未修复或隐藏；功能成功标记不代表完整日志通过。
+- 未执行：真人键鼠／手柄与画面验收、正式打包、独立进程专用服务器和高延迟压力测试。本轮没有提交 Git；完整验收仍未通过，不能宣称项目全部无报错。
+
+## CSV 配置接入（2026-10-29）
+
+- 新增 `Data/Levels.csv`、`Data/RewardCards.csv`，通过 Editor Python 导入为 `/MonsterArena/Data/` 下两个 DataAsset；`B_MonsterArenaProgression` 的 Definition 引用生成配置，Experience 注入该组件子类。默认经验及奖励数值保持一致。
+- Editor 模块新增 `BindProgression`，仅替换唯一的成长组件类，保留 Experience 其他配置。编辑器目标编译成功；Runtime 没有新增编辑器依赖。资源初始化脚本配置 Experience 后执行同一导入器。
+- `MonsterArenaCSVImportR3.log`：导入成功，退出码 0，命令行汇总 0 Error、0 Warning。
+- `MonsterArenaCSVValidationR2.log`：重复导入、配置数组／资产引用、等级断档、负经验、重复卡牌 ID 和非有限比例数值检查通过；退出码 0，汇总 0 Error、0 Warning。非法数据测试使用临时目录，在资产修改阶段之前拒绝输入。
+- `MonsterArenaCSVNetworkR2.log`：46 项双人 PIE 检查通过，包含实际玩家组件类型及 Definition 指向 CSV 生成资产的断言；成长、选卡、复制、死亡复活及退出均成功。
+- 最终双人运行完整日志仍有 1 条 PixelStreaming2 启动 Error、11 条 Warning（音频 6、MCP 提示 1、出生蒙太奇 4），Fatal／Ensure／断言／蓝图空引用／LogScript 警告为 0。不能宣称整个项目无报错。
+- 初次导入的 Python 反射接口错误和命令行资产扫描问题已修复，失败日志保留。正式打包和真人按键未在本轮重复验证；此前选卡功能未完成项仍然有效。
 
 当前结论：手动选卡功能已实现，编辑器编译、战斗／弹药／死亡复活回归及双人 PIE 的 44 项网络检查通过。默认键已改为 U，但真实 U 键打开、鼠标选卡、手柄导航及完整画面验收尚未完成；完整日志仍有启动错误和出生表现警告，不能标为完整验收通过。编译或单项自动测试通过不等于完整交付验收通过。
 
