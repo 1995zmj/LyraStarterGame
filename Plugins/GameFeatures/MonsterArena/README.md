@@ -1,59 +1,64 @@
 # MonsterArena
 
-第一阶段原型：步枪击杀怪物 → 获得局内经验 → 升级 → 自动获得强化。
+步枪击杀怪物 → 获得局内经验 → 升级积攒选卡次数 → 玩家手动打开三选一 → 确认后获得强化。
 
-## 运行
+## 运行与操作
 
-编译 `LyraEditor Win64 Development` 后重新打开编辑器。在内容浏览器启用插件内容，打开 `/MonsterArena/Maps/L_MonsterArena` 并运行 PIE。该地图使用 `/MonsterArena/System/Experiences/B_MonsterArena`，自动启用 ShooterCore 和 MonsterArena。也提供玩法入口资源 `/MonsterArena/System/Playlists/DA_MonsterArena`。
+编译 `LyraEditor Win64 Development` 后重新打开编辑器。在内容浏览器启用插件内容，打开 `/MonsterArena/Maps/L_MonsterArena` 并运行 PIE。该地图使用 `/MonsterArena/System/Experiences/B_MonsterArena`，启用 ShooterCore 和 MonsterArena。玩法入口资源为 `/MonsterArena/System/Playlists/DA_MonsterArena`。
 
-每个新角色自动装备步枪。方块怪物从四个 `MonsterSpawn` 标签出生点生成，每 2 秒补充一只，同时最多 6 只。怪物生命 60、移动速度 220，直接追逐玩家，140 单位内每秒近战造成 10 点伤害。直线追逐适用于当前开阔测试地图；复杂场景需要后续接入导航。
+每个新角色自动装备步枪。方块怪物从四个 `MonsterSpawn` 标签出生点生成，每 2 秒补充一只，同时最多 6 只。怪物生命 60、移动速度 220，直接追逐玩家，140 单位内每秒近战造成 10 点伤害。直线追逐适用于当前开阔地图；复杂场景需要接入导航。
 
-每只怪物给予击杀玩家 20 XP。初始 1 级，经验门槛依次为 60、100、140、180、220、260、300、340、380，最高 10 级。经验溢出保留，可连续升级。偶数等级获得最大生命 +20 并恢复 20 生命；奇数等级（从 3 级起）获得基础伤害 +3。步枪初始每发基础伤害 12，首次火力升级后为 15，距离和物理材质仍由原枪械规则处理。
+每只怪物给予击杀玩家 20 XP。初始 1 级，经验门槛依次为 60、100、140、180、220、260、300、340、380，最高 10 级。经验溢出保留，可连续升级；每升一级增加一次选卡机会。达到等级上限不会清除尚未使用的机会。
 
-`URunProgressionComponent` 保存在 PlayerState 上，服务端结算，成长状态仅向所属玩家复制。角色换 Pawn 时恢复强化；新对局重建 PlayerState 后重置。`ResetRun()` 可显式清空经验、击杀和奖励。停用玩法时清理怪物、界面和本玩法装备。当前未实现重连恢复或跨局存档。
+- 升级只更新 HUD 的“可选强化 ×N”提示，不自动打开界面，也不自动增加属性。
+- 默认按 `U` 或手柄上方向键手动打开强化界面。输入动作的稳定映射名为 `MonsterArena.OpenRewards`，提示读取实际映射按键。默认使用 `U` 避开项目中 `K` 的自毁调试快捷键。
+- 点击一张卡，再点击“确认强化”；键盘 `1` / `2` / `3` 可选中卡牌，`Enter` 确认。手柄可通过界面焦点导航选择和确认。
+- `Esc`、手柄返回键、键盘打开界面的映射按键或“返回战斗”按钮均可关闭。手柄方向键在界面内用于导航。未选次数和同一组候选保留，反复开关不能刷新卡牌。
+- 有剩余次数时，确认一张后在同一个窗口展示下一组；全部选完自动关闭。没有自动领取倒计时。
+- 单人和多人都不暂停世界。选卡玩家仍会受到正常伤害，界面不提供无敌；打开时停止自身射击并切换为菜单输入，关闭后恢复操作，开火需重新按下。
 
-## 配置与扩展
+## 默认卡池与配置
 
-- `URunProgressionDefinition`：经验表、生命奖励与伤害奖励参数，可创建 DataAsset 并配置到成长组件的蓝图子类。
-- `UMonsterArenaComponent`：刷怪间隔、存活上限和怪物类。
-- `AArenaMonster`：初始生命、经验奖励和近战伤害；使用独立 ASC，不需要怪物 PlayerState。
-- `UMonsterArenaContentLibrary`：位于 `MonsterArenaEditor` 模块的编辑器资源配置接口；仅编辑器使用，不属于运行时玩法。Python 脚本显式加载此 Editor 模块，Runtime 不依赖 Editor。
-- `Content/Python/setup_monster_arena.py`：在 Unreal 中生成插件专属 GameFeatureData、Experience、地图和玩法入口。已存在的 Experience 和地图布置保留。
+| 卡牌 ID | 名称 | 效果 |
+| --- | --- | --- |
+| `Firepower` | 火力强化 | 本局基础伤害 +3 |
+| `Vitality` | 体魄强化 | 本局最大生命 +20，立即恢复 20 生命 |
+| `Balance` | 均衡成长 | 本局基础伤害 +1、最大生命 +10，立即恢复 10 生命 |
+| `FieldMedicine` | 战地医疗 | 立即恢复最大生命值的 40% |
+| `AmmoSupply` | 弹药补给 | 本玩法步枪备用弹药 +60，仍需正常换弹 |
 
-当前奖励采用固定交替发放。后续在升级与发奖之间加入待选奖励队列、卡池和三选一确认流程。
+默认卡池等权抽取，同轮不重复，跨轮可再次选择。满血时纯治疗卡不进入候选；没有本玩法步枪时不提供补弹卡。永久强化随本局保留，即时治疗和弹药只在首次确认时发放。
+
+`URunProgressionDefinition` 配置经验表和可选的 `RewardPool`。创建 `URunRewardPoolDefinition` DataAsset 可替换原生默认池，其 `Cards` 数组每项包含：
+
+- `Option`：稳定 `CardId`、标题、说明、最大生命与伤害加成、固定／比例治疗、备用弹药数量。
+- `Weight`：抽取权重，0 表示不参与抽取。
+- `MaxStacks`：本局最多可选择次数，0 表示不限次数。
+- `MinimumLevel`：这次升级奖励对应的最低等级；积攒次数后再打开不会把早期奖励变成高等级奖励。
+
+将该卡池赋给成长定义的 `RewardPool`，再把成长定义配置给 `URunProgressionComponent::Definition`；为空时使用原生五张卡。候选不足三张时显示实际数量；卡池为空、无有效卡或全部达到上限时，提供可重复选择的基础火力强化，避免已获得的次数无法领取。卡牌说明应与配置的效果数值保持一致。
+
+## 状态与生命周期
+
+`URunProgressionComponent` 位于 PlayerState 上。服务端负责经验、抽取候选、资格校验和发奖，等级、待选次数、候选及已选记录作为同一份状态仅复制给所属玩家。客户端提交对局编号、候选编号和卡牌 ID，不提交奖励数值。重复、伪造、旧候选或上一局的选择请求不会重复发奖；失败保留选卡机会。
+
+死亡时关闭界面并释放选卡输入状态，保留已选记录、待选次数和当前候选。重生只从已选记录恢复永久属性，不再次发放治疗或弹药，也不自动重开界面。新对局重建 PlayerState 后重置；`ResetRun()` 可显式清空经验、击杀、候选和奖励，并更新对局编号。当前未实现断线重连恢复或跨局存档。
+
+MonsterArena 通过 Lyra QuickBar 添加并选择步枪，射击、换弹和 HUD 使用同一个库存物品。停用玩法时清理怪物、界面、输入绑定和本玩法创建的装备；共享库存物品按原生命周期管理。
+
+## 代码与资源归属
+
+- `MonsterArenaRuntime`：成长状态、卡池、奖励效果、怪物、HUD，以及 `UMonsterArenaRewardScreen` CommonUI 界面。HUD 实现在 `Private/MonsterArenaHUD.cpp`，选卡界面实现在 `Private/MonsterArenaRewardScreen.cpp`。原生默认布局可以直接运行，`RewardScreenClass` 提供界面子类入口。
+- `MonsterArenaEditor`：`UMonsterArenaContentLibrary` 资源配置接口，以及 `Private/Tests/` 下的编辑器测试桥接。Runtime 不依赖 Editor；Editor 模块不进入游戏运行时目标。
+- `Content/Python/setup_monster_arena.py`：创建和配置插件专属 GameFeatureData、Experience、地图和玩法入口；已有 Experience 和地图布置保留。
+- `UMonsterArenaComponent`：刷怪间隔、存活上限和怪物类。`AArenaMonster`：初始生命、经验奖励和近战伤害，使用独立 ASC，无需怪物 PlayerState。
+
+专用蓝图和配置位于 `/MonsterArena/`：`UI/Notifications` 保存击杀播报，`UI/Weapons` 保存准星，`Weapons` 保存物品定义，`Characters/B_MonsterArenaShooterHero` 继承共享射击角色并覆盖本地初始物品。`System/HeroData_MonsterArena` 和 `System/Experiences/LAS_MonsterArena_Components` 将它们接入对局。通用枪械能力、模型、动画和基础 HUD 继续复用 ShooterCore。
+
+本地播报和准星在读取击杀消息中的玩家状态前进行有效性检查。共享播报由 `LAS_ShooterGame_StandardComponents` 启用，MonsterArena 的组件集只注入本地播报。共享资源不应反向引用 `/MonsterArena/`。
 
 ## 验证
 
-测试目录、运行方式及验收记录见 [Tests/README.md](Tests/README.md) 和 [Tests/ACCEPTANCE.md](Tests/ACCEPTANCE.md)。C++ 测试集中在 `Source/MonsterArenaRuntime/Private/Tests/`，编辑器校验脚本位于 `Tests/Python/`。
+运行命令与测试覆盖见 [Tests/README.md](Tests/README.md)，已执行结果及未完成项见 [Tests/ACCEPTANCE.md](Tests/ACCEPTANCE.md)。Runtime C++ 测试位于 `Source/MonsterArenaRuntime/Private/Tests/`，Editor 测试桥接位于 `Source/MonsterArenaEditor/Private/Tests/`，Python 校验脚本位于 `Tests/Python/`。
 
-独立无界面战斗验证（仅开发构建）：
-
-```powershell
-& "$UE/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "$PWD/LyraStarterGame.uproject" /MonsterArena/Maps/L_MonsterArena -game -MonsterArenaSmokeTest -unattended -NullRHI -nosound -SCCProvider=None -abslog="$PWD/Saved/Logs/MonsterArenaSmoke.log"
-```
-
-验证 Experience 组件注入、真实步枪 GameplayEffect 伤害、武器射线通道、死亡奖励去重、8 次击杀升到 3 级、奖励后伤害变化、经验溢出、等级上限及重置回收。成功输出 `MONSTER_ARENA_SMOKE_SUCCEEDED` 并以 0 退出。
-
-无界面测试不能代替画面和输入验收。双客户端网络复制、死亡复活全过程和手动射击仍需要 PIE 验证。
-
-### 自动射击与弹药回归验证
-
-MonsterArena 通过 Lyra QuickBar 添加并选择步枪，不再绕过快捷栏直接叠加装备。射击能力、换弹能力与 HUD 因此使用同一个库存物品。对局清理只移除本玩法创建的物品；角色失去控制器时，快捷栏也会清空旧装备引用。
-
-以开发参数 `-MonsterArenaAmmoTest` 替代上述命令中的 `-MonsterArenaSmokeTest`，运行真实输入驱动的弹药测试。验证单武器装备、快捷栏与弹药来源一致、初始 30 发、持续空射扣弹、松开停止扣弹、空弹匣停火和备用弹药换弹。成功输出 `MONSTER_ARENA_AMMO_SUCCEEDED` 并以 0 退出。
-
-使用 `-MonsterArenaLifecycleTest` 可运行两次实际怪物击杀与自动复活测试，验证复活后等级、奖励和武器物品保留；成功输出 `MONSTER_ARENA_LIFECYCLE_SUCCEEDED`。无渲染模式中 Niagara 特效可能返回空组件，日志清洁验收仍应在有渲染的 PIE 中执行。
-
-### 玩家死亡与复活验证
-
-本地的 `B_MonsterArenaEliminationFeedRelay` 在读取姓名、Pawn 和队伍前检查消息双方的 PlayerState；`W_MonsterArenaReticle_Rifle` 和 `W_MonsterArenaReticle_Pistol` 在读取击杀者控制器前检查 LyraPlayerState。非玩家击杀者不进入仅支持玩家的播报和准星击杀动画逻辑，死亡事件与自动复活照常处理。
-
-### 插件资源边界
-
-专用蓝图和配置位于 `/MonsterArena/`：`UI/Notifications` 保存击杀播报，`UI/Weapons` 保存步枪及手枪准星，`Weapons` 保存引用本地准星的物品定义，`Characters/B_MonsterArenaShooterHero` 继承共享射击角色并覆盖本地初始物品，`System/HeroData_MonsterArena` 和 `System/Experiences/LAS_MonsterArena_Components` 将它们接入对局。使用角色子类保留共享武器对射击角色类型的要求。通用枪械能力、模型和基础 HUD 继续复用 ShooterCore。
-
-ShooterCore 原有播报和准星蓝图中的 MonsterArena 专用检查已移除。通用播报由 `LAS_ShooterGame_StandardComponents` 启用，不再由 ShooterCore 的 GameFeatureData 全局注入；MonsterArena 的本地组件集只注入本地播报。共享资源不能引用 `/MonsterArena/`，避免其他玩法加载本玩法专用逻辑。
-
-已在编辑器 PIE 中验证怪物击杀玩家并连续自动复活，未再出现这些蓝图的 `Accessed None` 或击杀播报队伍颜色的 Switch 警告。此前命令行战斗验证只覆盖玩家击杀怪物，不能替代这个反向场景。
-
-项目启用的实验性编辑器工具在独立 `-game` 启动中可能输出原有 Python/Automation 初始化错误；应同时检查本插件测试标记和玩法日志。
+无界面断言和反射调用不能替代画面、真实鼠标键盘／手柄输入及网络验收。每次检查完整运行日志：成功标记只代表对应断言完成，不代表整个会话没有 Error、Warning 或蓝图异常。独立 `-game` 和 `-NullRHI` 测试可能出现引擎实验性工具初始化错误或特效空引用警告，需在验收记录中明确区分。

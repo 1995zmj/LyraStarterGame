@@ -1,5 +1,6 @@
 #include "ArenaMonster.h"
 
+#include "ArenaMeleeDamageEffect.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/LyraHealthSet.h"
 #include "AbilitySystem/Attributes/LyraCombatSet.h"
@@ -138,13 +139,12 @@ void AArenaMonster::Tick(float DeltaSeconds)
 		{
 			if (UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target))
 			{
-				UGameplayEffect* Effect = NewObject<UGameplayEffect>(this);
-				FGameplayModifierInfo& Modifier = Effect->Modifiers.AddDefaulted_GetRef();
-				Modifier.Attribute = ULyraHealthSet::GetDamageAttribute();
-				Modifier.ModifierOp = EGameplayModOp::Additive;
-				Modifier.ModifierMagnitude = FScalableFloat(MeleeDamage);
-				FGameplayEffectSpec DamageSpec(Effect, AbilitySystem->MakeEffectContext(), 1.0f);
-				TargetASC->ApplyGameplayEffectSpecToSelf(DamageSpec);
+				FGameplayEffectSpecHandle DamageSpec = AbilitySystem->MakeOutgoingSpec(UArenaMeleeDamageEffect::StaticClass(), 1.0f, AbilitySystem->MakeEffectContext());
+				if (DamageSpec.IsValid())
+				{
+					DamageSpec.Data->SetSetByCallerMagnitude(TAG_MonsterArena_MeleeDamage, MeleeDamage);
+					AbilitySystem->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);
+				}
 			}
 		}
 		AttackCooldown = 1.0f;

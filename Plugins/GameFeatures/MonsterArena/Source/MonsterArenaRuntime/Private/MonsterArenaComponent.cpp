@@ -29,54 +29,6 @@ void TickMonsterArenaAmmoTest(ALyraPlayerState* Player, float DeltaTime);
 void TickMonsterArenaLifecycleTest(ALyraPlayerState* Player, float DeltaTime);
 #endif
 
-TSharedRef<SWidget> UMonsterArenaHUD::RebuildWidget()
-{
-	if (!WidgetTree)
-	{
-		WidgetTree = NewObject<UWidgetTree>(this);
-	}
-	SetVisibility(ESlateVisibility::HitTestInvisible);
-	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>();
-	WidgetTree->RootWidget = Root;
-	UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>();
-	UCanvasPanelSlot* CanvasSlot = Root->AddChildToCanvas(Box);
-	CanvasSlot->SetPosition(FVector2D(32.0f, 120.0f));
-	CanvasSlot->SetSize(FVector2D(420.0f, 160.0f));
-	Status = WidgetTree->ConstructWidget<UTextBlock>();
-	Box->AddChildToVerticalBox(Status);
-	ExperienceBar = WidgetTree->ConstructWidget<UProgressBar>();
-	ExperienceBar->SetFillColorAndOpacity(FLinearColor(0.1f, 0.8f, 0.6f));
-	Box->AddChildToVerticalBox(ExperienceBar);
-	Reward = WidgetTree->ConstructWidget<UTextBlock>();
-	Box->AddChildToVerticalBox(Reward);
-	return Super::RebuildWidget();
-}
-
-void UMonsterArenaHUD::NativeTick(const FGeometry& Geometry, float DeltaTime)
-{
-	Super::NativeTick(Geometry, DeltaTime);
-	const APlayerController* PC = GetOwningPlayer();
-	const URunProgressionComponent* Progress = PC && PC->PlayerState ? PC->PlayerState->FindComponentByClass<URunProgressionComponent>() : nullptr;
-	if (!Progress || !Status)
-	{
-		return;
-	}
-	const int32 Required = Progress->GetExperienceRequired();
-	Status->SetText(FText::FromString(FString::Printf(TEXT("Lv.%d  |  XP %d / %d  |  Kills %d"), Progress->State.Level, Progress->State.Experience, Required, Progress->State.Kills)));
-	ExperienceBar->SetPercent(Required > 0 ? float(Progress->State.Experience) / Required : 1.0f);
-	if (Progress->State.Level > LastLevel)
-	{
-		Reward->SetText(FText::FromString(TEXT("LEVEL UP! Upgrade granted: even levels +20 health, odd levels +3 damage")));
-		NotificationRemaining = 5.0f;
-	}
-	LastLevel = Progress->State.Level;
-	NotificationRemaining -= DeltaTime;
-	if (NotificationRemaining <= 0.0f)
-	{
-		Reward->SetText(FText::GetEmpty());
-	}
-}
-
 UMonsterArenaComponent::UMonsterArenaComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {

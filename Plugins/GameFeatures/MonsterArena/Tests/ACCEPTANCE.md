@@ -2,7 +2,37 @@
 
 日期：2026-10-29，时区 Asia/Shanghai。
 
-当前结论：资源作用域迁移及其编译、自动化和有渲染 PIE 回归已通过；完整画面、实际鼠标键盘和联网验收仍未完成。编译或单项自动测试通过不等于完整交付验收通过。
+当前结论：手动选卡功能已实现，编辑器编译、战斗／弹药／死亡复活回归及双人 PIE 的 44 项网络检查通过。默认键已改为 U，但真实 U 键打开、鼠标选卡、手柄导航及完整画面验收尚未完成；完整日志仍有启动错误和出生表现警告，不能标为完整验收通过。编译或单项自动测试通过不等于完整交付验收通过。
+
+## 升级后手动选卡（2026-10-29）
+
+升级只累计待选次数，由玩家手动打开 CommonUI 选卡；世界不暂停。服务端抽取和结算，关闭／死亡后保留候选，复活不自动开窗；永久效果保留，即时治疗和补弹不重复发放。代码、原生界面、卡池及测试均归属 MonsterArena。
+
+| 检查 | 方法、证据及实际结果 |
+| --- | --- |
+| 编辑器目标编译 | `LyraEditor Win64 Development` 编译成功；U 键及 HUD 提示修改后再次编译成功 |
+| 击杀、经验与选卡结算 | `Saved/Logs/MonsterArenaManualRewardsSmokeR2.log`：`MONSTER_ARENA_SMOKE_SUCCEEDED`、`MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`；覆盖关闭保留、无效／重复请求、卡池过滤与即时奖励去重 |
+| 自动射击与弹药 | `Saved/Logs/MonsterArenaManualRewardsAmmo.log`：`MONSTER_ARENA_AMMO_SUCCEEDED`；包含扣弹、松开停火、空弹匣和换弹 |
+| 两次真实死亡与复活 | `Saved/Logs/MonsterArenaManualRewardsLifecycleR3.log`：`MONSTER_ARENA_LIFECYCLE_SUCCEEDED`；第一次复活保持测试设定的 20 生命、不重发治疗，第二次正常复活维护后实际／预期均为 120 生命 |
+| 双人有渲染 PIE | `Saved/Logs/MonsterArenaManualRewardsNetworkR8.log`：44 项 PASS、0 FAIL，`MONSTER_ARENA_REWARD_NETWORK_SUCCEEDED`；`MonsterArenaRewardNetworkResult.json` 的 `passed=true` |
+| 网络覆盖范围 | 同进程监听服务器与客户端，验证 owner-only 状态、服务端发奖、关闭后快速重开、候选不刷新、重复／旧对局请求、选卡受伤、死亡关闭、复活继续领取及输入锁清理；测试暂时停止刷怪，由正常 GAS 路径施加伤害 |
+| Runtime／Editor 边界 | UBT JsonExport 输出 `Saved/MonsterArenaRewardsGameModules.json`：游戏目标含 MonsterArenaRuntime，不含 MonsterArenaEditor、UnrealEd；没有执行完整打包 |
+| 交互预览 | `MonsterArenaManualRewardsVisualR3.log` 的预览已准备，实际画面看到 U 键提示及三次待选机会，未自动弹窗；下一步真实按键操作被用户物理 Esc 停止，未将其记为选卡交互通过 |
+
+网络验收通过 Editor 测试桥接恢复正常 RPC 调用规则。Python 编辑器执行保护会将直接嵌套的客户端 Server RPC 作为本地调用，因此早期直接调用界面的结果不能用作网络通过证据。测试也避免跨地图旅行持有临时 World 引用；失败轮次日志保留。
+
+本轮修复了快速重开时旧 Slate 析构清理新会话、复活时最大生命效果移除造成血量夹断，以及动态近战 GameplayEffect 的网络引用警告。R8 的 `NetPackageMap`／`SupportsObject` 警告为 0。真实输入检查发现原有 K 键绑定 `DamageSelfDestruct`，默认选卡键改为 U；R8 使用正常界面函数和 RPC 入口，未验证物理 U 键。
+
+完整 R8 日志从启动到关闭仍有 **1 条 Error、11 条 Warning**：
+
+- PixelStreaming2RTC 启动 Error：`Cannot set target window - GEngine is not valid`。
+- 音频设备采样率转换 Warning 6 条，MCP 插件许可提示 Warning 1 条。
+- `GA_SpawnEffect` 两次出生播放 `AM_MM_Pistol_Spawn` 失败，共 4 条 Warning；此项属于出生表现初始化问题，尚未修复，不能归类为外部服务错误。
+- Fatal、Ensure、断言、LogScript 警告、Python Traceback 及蓝图空引用均为 0。
+
+独立 `-NullRHI -nosound -game` 回归还保留实验性工具初始化 Error、Niagara／倒计时音频空引用警告；功能成功标记不代表这些完整日志无报错。没有删除历史日志或修改日志等级。
+
+未完成：U 键和鼠标的完整选卡流程、按住开火时开关界面、焦点切换、手柄实机导航、完整界面截图验收；独立进程专用服务器、丢包／高延迟、断线重连和正式打包未验证。本次提交不包含 CSV／xlsx 数据导入功能，该部分目前仅讨论了方案。
 
 ## 测试目录整理（2026-10-29）
 
