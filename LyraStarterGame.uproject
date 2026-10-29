@@ -292,6 +292,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "MonsterArena",
+			"Enabled": true
+		},
+		{
 			"Name": "ShooterMaps",
 			"Enabled": true
 		},

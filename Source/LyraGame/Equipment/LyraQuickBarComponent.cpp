@@ -115,9 +115,10 @@ void ULyraQuickBarComponent::UnequipItemInSlot()
 		if (EquippedItem != nullptr)
 		{
 			EquipmentManager->UnequipItem(EquippedItem);
-			EquippedItem = nullptr;
 		}
 	}
+	// The controller may already be unpossessed while a dead pawn's loadout is removed.
+	EquippedItem = nullptr;
 }
 
 ULyraEquipmentManagerComponent* ULyraQuickBarComponent::FindEquipmentManager() const

@@ -1,0 +1,22 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1",
+	"FriendlyName": "Monster Arena",
+	"Description": "Gun combat, monsters and per-run progression.",
+	"Category": "Game Features",
+	"CanContainContent": true,
+	"ExplicitlyLoaded": true,
+	"EnabledByDefault": false,
+	"BuiltInInitialFeatureState": "Registered",
+	"Modules": [
+		{ "Name": "MonsterArenaRuntime", "Type": "Runtime", "LoadingPhase": "Default" },
+		{ "Name": "MonsterArenaEditor", "Type": "Editor", "LoadingPhase": "Default" }
+	],
+	"Plugins": [
+		{ "Name": "ShooterCore", "Enabled": true },
+		{ "Name": "GameplayAbilities", "Enabled": true },
+		{ "Name": "GameFeatures", "Enabled": true },
+		{ "Name": "ModularGameplay", "Enabled": true }
+	]
+}
