@@ -107,12 +107,20 @@ def run_rewards():
 
     yield from wait_for(lambda: local_hud() is not None, "Owning client's HUD is ready")
     hud = local_hud()
+    check(hud.get_class().get_path_name() == "/MonsterArena/UI/W_MonsterArenaHUD.W_MonsterArenaHUD_C", "Live HUD uses the designer-authored Widget Blueprint")
+    yield from wait_for(lambda: "等级 4" in str(hud.get_editor_property("status").get_text()), "HUD Blueprint text binding displays replicated level")
+    check(abs(hud.get_editor_property("experience_bar").get_editor_property("percent") - 25.0 / 180.0) < 0.001, "HUD Blueprint progress bar displays overflow XP")
     check(not hud.is_reward_menu_open(), "HUD remains closed after upgrade")
     health = unreal.LyraHealthComponent.find_health_component(server_player.get_pawn())
     yield from wait_for(lambda: not library.is_damage_immune(server_player.get_pawn()), "Normal spawn protection expires", 15.0)
     check(abs(health.get_max_health() - 100.0) < 0.01, "Unclaimed upgrades do not increase health")
     library.open_reward_menu(hud)
     yield from wait_for(lambda: len(state(owner).options) == 3 and hud.is_reward_menu_open(), "Manual UI open requests three server-generated cards")
+    check(hud.get_reward_screen().get_class().get_path_name() == "/MonsterArena/UI/W_MonsterArenaRewardScreen.W_MonsterArenaRewardScreen_C", "Actual card selection uses the designer-authored reward screen Blueprint")
+    import runpy
+    card_cases = runpy.run_path(os.path.join(unreal.Paths.project_plugins_dir(), "GameFeatures/MonsterArena/Tests/Python/reward_card_view_cases.py"))
+    card_cases["validate"](hud.get_reward_screen(), owner, check)
+
     ids = option_ids(owner)
     offer_id = state(owner).offer_id
     run_id = state(owner).run_id

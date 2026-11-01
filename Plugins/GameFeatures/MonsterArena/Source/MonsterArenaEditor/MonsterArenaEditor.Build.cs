@@ -6,6 +6,6 @@ public class MonsterArenaEditor : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
-		PrivateDependencyModuleNames.AddRange(new[] { "MonsterArenaRuntime", "LyraGame", "GameFeatures", "GameplayAbilities", "GameplayTags", "GameplayMessageRuntime", "UnrealEd" });
+		PrivateDependencyModuleNames.AddRange(new[] { "MonsterArenaRuntime", "LyraGame", "GameFeatures", "GameplayAbilities", "GameplayTags", "GameplayMessageRuntime", "UnrealEd", "UMG", "UMGEditor", "AssetTools" });
 	}
 }

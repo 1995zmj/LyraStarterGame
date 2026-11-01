@@ -10,7 +10,10 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "MonsterArenaComponent.h"
-#include "MonsterArenaRewardScreen.h"
+#include "UI/MonsterArenaHUD.h"
+#include "UI/MonsterArenaRewardCard.h"
+#include "Components/Button.h"
+#include "UI/MonsterArenaRewardScreen.h"
 #include "PlayInEditorDataTypes.h"
 #include "RunProgressionComponent.h"
 #include "Settings/LevelEditorPlaySettings.h"
@@ -113,7 +116,9 @@ bool UMonsterArenaRewardTestLibrary::SelectAndConfirmReward(UMonsterArenaRewardS
 		return false;
 	}
 	TGuardValue<bool> RestoreGameplayCallspace(GAllowActorScriptExecutionInEditor, false);
-	Screen->SelectCard(Index);
+	UMonsterArenaRewardCard* Card = Cast<UMonsterArenaRewardCard>(Screen->GetWidgetFromName(*FString::Printf(TEXT("Card%d"), Index + 1)));
+	if (!Card || !Card->GetIsEnabled() || !Card->GetSelectionButton()) { return false; }
+	Card->GetSelectionButton()->OnClicked.Broadcast();
 	Screen->ConfirmSelection();
 	return true;
 }

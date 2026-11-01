@@ -1,17 +1,13 @@
-#include "MonsterArenaComponent.h"
+#include "UI/MonsterArenaHUD.h"
 
-#include "MonsterArenaRewardScreen.h"
+#include "UI/MonsterArenaRewardScreen.h"
+#include "UI/MonsterArenaRewardInputAction.h"
 #include "RunProgressionComponent.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
-#include "Blueprint/WidgetTree.h"
 #include "Character/LyraHealthComponent.h"
 #include "Character/LyraPawnData.h"
 #include "Character/LyraPawnExtensionComponent.h"
-#include "Components/CanvasPanel.h"
-#include "Components/CanvasPanelSlot.h"
-#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
-#include "Components/VerticalBox.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/GameViewportClient.h"
 #include "EnhancedInputComponent.h"
@@ -83,31 +79,10 @@ private:
 	TSet<FKey> FireKeys;
 };
 
-TSharedRef<SWidget> UMonsterArenaHUD::RebuildWidget()
-{
-	if (!WidgetTree) { WidgetTree = NewObject<UWidgetTree>(this); }
-	SetVisibility(ESlateVisibility::HitTestInvisible);
-	UCanvasPanel* Root = WidgetTree->ConstructWidget<UCanvasPanel>();
-	WidgetTree->RootWidget = Root;
-	UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>();
-	UCanvasPanelSlot* CanvasSlot = Root->AddChildToCanvas(Box);
-	CanvasSlot->SetPosition(FVector2D(32.0f, 120.0f));
-	CanvasSlot->SetSize(FVector2D(480.0f, 150.0f));
-	Status = WidgetTree->ConstructWidget<UTextBlock>();
-	Box->AddChildToVerticalBox(Status);
-	ExperienceBar = WidgetTree->ConstructWidget<UProgressBar>();
-	ExperienceBar->SetFillColorAndOpacity(FLinearColor(0.1f, 0.8f, 0.6f));
-	Box->AddChildToVerticalBox(ExperienceBar);
-	Reward = WidgetTree->ConstructWidget<UTextBlock>();
-	Reward->SetAutoWrapText(true);
-	Reward->SetColorAndOpacity(FLinearColor(0.35f, 1.0f, 0.75f));
-	Box->AddChildToVerticalBox(Reward);
-	return Super::RebuildWidget();
-}
-
 void UMonsterArenaHUD::NativeConstruct()
 {
 	Super::NativeConstruct();
+	SetVisibility(ESlateVisibility::HitTestInvisible);
 	APlayerController* PC = GetOwningPlayer();
 	if (PC && PC->IsLocalController())
 	{
@@ -198,42 +173,6 @@ void UMonsterArenaHUD::NativeTick(const FGeometry& Geometry, float DeltaTime)
 	RefreshProgression();
 }
 
-void UMonsterArenaHUD::RefreshProgression()
-{
-	if (!BoundProgression || !Status || !Reward) { return; }
-	const FRunProgressionState& State = BoundProgression->State;
-	const int32 Required = BoundProgression->GetExperienceRequired();
-	Status->SetText(FText::Format(LOCTEXT("Status", "等级 {0}  |  经验 {1}/{2}  |  击杀 {3}"), FText::AsNumber(State.Level), FText::AsNumber(State.Experience), FText::AsNumber(Required), FText::AsNumber(State.Kills)));
-	if (BoundProgression->GetDamagePerKill() > 0.0f)
-	{
-		Status->SetText(FText::Format(LOCTEXT("StatusAccumulation", "{0}\n火力积累：每次击杀 +{1}  |  已累积伤害 +{2}"), Status->GetText(), FText::AsNumber(BoundProgression->GetDamagePerKill()), FText::AsNumber(State.AccumulatedKillDamage)));
-	}
-	ExperienceBar->SetPercent(Required > 0 ? float(State.Experience) / Required : 1.0f);
-	if (State.Level > LastLevel) { NotificationRemaining = 5.0f; }
-	LastLevel = State.Level;
-	const float HintBrightness = NotificationRemaining > 0.0f ? 0.82f + 0.18f * FMath::Cos(NotificationRemaining * 8.0f) : 0.82f;
-	Reward->SetRenderOpacity(HintBrightness);
-	FText Keys = LOCTEXT("DefaultRewardKeys", "U / 手柄↑");
-	if (const ULocalPlayer* LocalPlayer = GetOwningLocalPlayer())
-	{
-		if (const UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-		{
-			TArray<FString> Labels;
-			for (const FKey& Key : Subsystem->QueryKeysMappedToAction(OpenRewardAction))
-			{
-				FText Label = Key.GetDisplayName();
-				if (Key == EKeys::Gamepad_DPad_Up) { Label = LOCTEXT("DPadUp", "手柄↑"); }
-				else if (Key == EKeys::Gamepad_DPad_Down) { Label = LOCTEXT("DPadDown", "手柄↓"); }
-				else if (Key == EKeys::Gamepad_DPad_Left) { Label = LOCTEXT("DPadLeft", "手柄←"); }
-				else if (Key == EKeys::Gamepad_DPad_Right) { Label = LOCTEXT("DPadRight", "手柄→"); }
-				Labels.AddUnique(Label.ToString());
-			}
-			if (!Labels.IsEmpty()) { Keys = FText::FromString(FString::Join(Labels, TEXT(" / "))); }
-		}
-	}
-	Reward->SetText(State.PendingChoices > 0 ? FText::Format(LOCTEXT("Available", "可选强化 ×{0}  ·  按 {1} 打开"), FText::AsNumber(State.PendingChoices), Keys) : LOCTEXT("NoRewards", "击杀怪物获取经验，升级后可选择强化"));
-}
-
 void UMonsterArenaHUD::ToggleRewardMenu()
 {
 	if (IsRewardMenuOpen() || bRewardOpenRequested) { CloseRewardMenu(); }
@@ -265,7 +204,12 @@ void UMonsterArenaHUD::TryOpenRewardMenu()
 		return;
 	}
 	const FGameplayTag ModalLayer = FGameplayTag::RequestGameplayTag(TEXT("UI.Layer.Modal"));
-	UClass* ScreenClass = RewardScreenClass ? RewardScreenClass.Get() : UMonsterArenaRewardScreen::StaticClass();
+	UClass* ScreenClass = RewardScreenClass.LoadSynchronous();
+	if (!ScreenClass)
+	{
+		bRewardOpenRequested = false;
+		return;
+	}
 	RewardScreen = Layout->PushWidgetToLayerStack<UMonsterArenaRewardScreen>(ModalLayer, ScreenClass, [this](UMonsterArenaRewardScreen& Screen)
 	{
 		Screen.InitializeForProgression(BoundProgression, this);

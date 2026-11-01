@@ -1,26 +1,16 @@
 #pragma once
 
 #include "CommonActivatableWidget.h"
-#include "InputAction.h"
 #include "MonsterArenaRewardScreen.generated.h"
 
 class UButton;
-class UBorder;
+class UMonsterArenaRewardCard;
 class UTextBlock;
 class UMonsterArenaHUD;
 class URunProgressionComponent;
 
-/** Native action with a stable mapping name, exposed in Lyra's keyboard settings. */
-UCLASS()
-class UMonsterArenaRewardInputAction : public UInputAction
-{
-	GENERATED_BODY()
-public:
-	UMonsterArenaRewardInputAction();
-};
-
 /** Per-local-player selection UI. Only the server can grant a card. */
-UCLASS(Blueprintable)
+UCLASS(Abstract, Blueprintable)
 class MONSTERARENARUNTIME_API UMonsterArenaRewardScreen : public UCommonActivatableWidget
 {
 	GENERATED_BODY()
@@ -37,7 +27,7 @@ public:
 	bool IsAwaitingResponse() const { return bAwaitingResponse; }
 
 protected:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeConstruct() override;
 	virtual void NativeOnActivated() override;
 	virtual void NativeOnDeactivated() override;
 	virtual void NativeDestruct() override;
@@ -51,37 +41,29 @@ private:
 	UFUNCTION()
 	void HandleRequestFailed(FText Reason);
 	UFUNCTION()
-	void SelectFirst();
-	UFUNCTION()
-	void SelectSecond();
-	UFUNCTION()
-	void SelectThird();
+	void HandleCardSelected(int32 Index);
 	void ReleaseSession();
 	void RefreshSelectionStyle();
 	UPROPERTY(Transient)
 	TObjectPtr<URunProgressionComponent> Progression;
 	UPROPERTY(Transient)
 	TObjectPtr<UMonsterArenaHUD> HUD;
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UButton>> CardButtons;
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UBorder>> CardBorders;
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UTextBlock>> CardTitles;
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UTextBlock>> CardDescriptions;
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UTextBlock>> CardPreviews;
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UTextBlock>> CardStacks;
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "MonsterArena|Rewards", meta = (AllowPrivateAccess = "true"))
+	TArray<TObjectPtr<UMonsterArenaRewardCard>> Cards;
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> PendingText;
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UTextBlock> FeedbackText;
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> ConfirmButton;
-	UPROPERTY(Transient)
+	UPROPERTY(Transient, meta = (BindWidget))
 	TObjectPtr<UButton> CloseButton;
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UMonsterArenaRewardCard> Card1;
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UMonsterArenaRewardCard> Card2;
+	UPROPERTY(Transient, meta = (BindWidget))
+	TObjectPtr<UMonsterArenaRewardCard> Card3;
 	int32 SelectedIndex = INDEX_NONE;
 	int32 DisplayedRunId = INDEX_NONE;
 	int32 DisplayedOfferId = INDEX_NONE;

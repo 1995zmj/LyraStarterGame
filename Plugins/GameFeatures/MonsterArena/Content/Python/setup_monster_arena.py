@@ -161,4 +161,6 @@ assets.save_loaded_asset(playlist)
 
 # Restore CSV-authored progression binding after experience configuration.
 runpy.run_path(str(Path(__file__).with_name("import_progression_csv.py")), run_name="__main__")
+runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_hud.py")), run_name="__main__")
+runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_reward_screen.py")), run_name="__main__")
 unreal.log("MONSTER_ARENA_SETUP_SUCCEEDED")

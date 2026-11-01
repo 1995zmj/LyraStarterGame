@@ -1,14 +1,9 @@
 #include "MonsterArenaComponent.h"
+#include "UI/MonsterArenaHUD.h"
 
 #include "ArenaMonster.h"
 #include "RunProgressionComponent.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
-#include "Blueprint/WidgetTree.h"
-#include "Components/CanvasPanel.h"
-#include "Components/CanvasPanelSlot.h"
-#include "Components/VerticalBox.h"
-#include "Components/ProgressBar.h"
-#include "Components/TextBlock.h"
 #include "EngineUtils.h"
 #include "Equipment/LyraEquipmentManagerComponent.h"
 #include "Equipment/LyraEquipmentDefinition.h"
@@ -71,7 +66,7 @@ void UMonsterArenaComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			const bool bExists = HUDs.ContainsByPredicate([PC](const UMonsterArenaHUD* HUD) { return HUD && HUD->GetOwningPlayer() == PC; });
 			if (!bExists)
 			{
-				UMonsterArenaHUD* HUD = CreateWidget<UMonsterArenaHUD>(PC, UMonsterArenaHUD::StaticClass());
+				UMonsterArenaHUD* HUD = CreateWidget<UMonsterArenaHUD>(PC, HUDClass.LoadSynchronous());
 				if (HUD)
 				{
 					HUD->AddToPlayerScreen();

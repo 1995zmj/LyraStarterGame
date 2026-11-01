@@ -1,6 +1,33 @@
 # MonsterArena 验收记录
 
-更新日期：2026-10-30，时区 Asia/Shanghai。以下按轮次保留历史结果。
+更新日期：2026-11-01，时区 Asia/Shanghai。以下按轮次保留历史结果。
+
+## 独立卡牌与可复用效果行（2026-11-01）
+
+- 参考 `W_PlayerTile.Configure` 向 `W_Powerup_Stat.Configure` 传数据的组合结构，新增 `W_MonsterArenaRewardCard` 和 `W_MonsterArenaRewardStat`。对应 C++ 全在 Runtime/UI，创建／校验工具在 Editor/UI。原来的选卡页仅绑定 Card1／Card2／Card3 和页面级确认／关闭控件；卡牌通过 Configure 接收快照，以 OnSelected 回传索引；效果行接收行为、合计值和预览，不处理奖励发放。
+- 多行为卡按行为生成行，重复行为合并，比例治疗显示百分比。卡牌不保存成长组件引用；关闭重开、换候选时重新配置行，避免保留旧对局数据。只读视图接口可供蓝图使用。正常／选中底色移到卡牌蓝图 Class Defaults。
+- 编译成功。`MonsterArenaRewardCardSetupR2.log`：重复生成／加载成功，退出码 0，无 Error／Warning／Ensure。`MonsterArenaRewardCardBindings.log`：三级父类、必要控件绑定和 HUD 默认界面类检查成功，退出码 0，无 Error／Warning／Ensure。
+- `MonsterArenaRewardCardNetworkR2.log`：**131 项双人 PIE 检查通过**，包含独立卡牌实例与候选 ID、效果行实例和合计值、七条行为合并为六行、40% 显示、重复 Configure 不留旧行且不发奖，以及关闭重开、确认、死亡复活、火力积累和重置。测试桥接改为广播子卡牌按钮点击，再通过子控件事件选择，最后确认；不再直接调用页面 SelectCard 绕过卡牌事件。
+- 初次迁移遇到 UE 5.8 控件 GUID 索引 Ensure，已补齐迁移时新增／删除控件的 GUID 元数据，保留未改动控件和动画的 GUID；首次失败日志保留。重复生成成功证明当前资产可重载，未额外构造一份全新旧版资产重做迁移。首次运行检查因读取私有视图数组失败，改为正式只读蓝图展示接口后 R2 通过。
+- 最终双人完整日志为 **1 Error、12 Warning**：既有 PixelStreaming2RTC 启动错误；出生蒙太奇 6、MCP 许可 1、HTTP 超时 2、退出时 EOS 请求取消 3。Fatal／Ensure／断言／蓝图异常／LogScript 警告／Python Traceback 均为 0。
+- `W_PlayerTile` 和 `W_Powerup_Stat` 的未保存提示交由用户处理后，用户回复已关闭；验收期间曾观察到本地变更。提交前复核时这两个参考资源已无本地差异，本次提交不包含它们。
+- `MonsterArenaRewardCardVisual.log`：单人预览通过 computer-use 实际按 U 打开，观察三个独立卡牌及多行为效果行；鼠标点击第二张卡出现选中底色，点击确认后待选 3→2，下一轮生命上限预览由 100→120 更新为 120→140，已选次数为 1。点击返回战斗后实际开火，弹匣 30→29；再次按 U 打开，剩余次数和候选保持。预览及编辑器通过正常窗口退出，没有保存临时预览世界或卡池。此预览暂停刷怪，不代表战斗压力测试。
+- 单人完整日志为 **1 Error、13 Warning**：既有 PixelStreaming2RTC 启动错误；MCP 许可 1、HTTP 上传重试及退出请求提示 12。Fatal／Ensure／断言／蓝图异常／LogScript 警告／Python Traceback 均为 0。开火时仍观察到既有 MusicManager 缺失屏幕提示。双人结构化结果另存为 `Saved/Logs/MonsterArenaRewardCardNetworkR2Result.json`；本轮保留全部失败与成功日志。
+- 本轮独立卡牌与效果行的编译、绑定、多人功能和真实键鼠验证通过，项目整体无报错门槛仍未通过。正式打包、手柄实机、按住开火时切换菜单、焦点切换、独立进程／高延迟测试未执行。本轮实现、测试和验收记录随本次提交提供。
+
+## HUD 独立代码、Widget Blueprint 与 UI 目录（2026-11-01）
+
+- `UMonsterArenaHUD` 从 `MonsterArenaComponent.h` 拆出，头文件及显示实现放在 Runtime 的 `Public/UI/MonsterArenaHUD.h`、`Private/UI/MonsterArenaHUD.cpp`；选卡输入、输入锁和弹窗管理放在 `Private/UI/MonsterArenaHUDInput.cpp`。选卡界面迁入相同 UI 目录，快捷键 Action 单独拆为 `MonsterArenaRewardInputAction.h/.cpp`。Editor 资源工具在 `Public/UI`、`Private/UI/MonsterArenaHUDLibrary`；测试保留原测试目录。所有源码 include 已更新，反射类名称和脚本模块路径保持不变。
+- 新增 `/MonsterArena/UI/W_MonsterArenaHUD`：设计器实际包含 Canvas → ProgressionPanel → Status／ExperienceBar／Reward，父类为 `UMonsterArenaHUD`。C++ 通过必要 `BindWidget` 字段更新数据，不再在 RebuildWidget 中覆盖设计器布局。刷怪组件通过 `HUDClass` 软类引用创建该蓝图；完整资源初始化包含单独的 HUD 生成脚本，已有蓝图不会被覆盖重建。
+- 目录迁移后 `LyraEditor Win64 Development` 编译成功，`git diff --check` 通过。UMGEditor、AssetTools 依赖仅增加在 MonsterArenaEditor；Runtime Build.cs 未新增 Editor 依赖。
+- `MonsterArenaHUDSetupR2.log`、`MonsterArenaHUDBindings.log`、最终 `MonsterArenaUIFolderBindings.log`：蓝图创建／保存、父类、控件类型及绑定编译检查通过，退出码均 0，完整日志 Error／Warning／Fatal／Ensure／脚本异常均为 0。
+- `MonsterArenaUIFolderNetwork.log`：最终目录结构下 **96 项双人 PIE 检查通过**，包含真实客户端 HUD 类为 W_MonsterArenaHUD_C、文字显示复制后的 4 级、经验条数值为 25/180，以及选卡、关闭重开、死亡复活、叠卡、火力积累和新局清零。正常结束 PIE 和编辑器，结构化结果 `passed=true`。
+- `MonsterArenaUIFolderVisual.log`：使用真实 computer-use 输入与截图检查了等级 4、经验 25/180、三次待选且没有自动开窗；U 打开、数字键 1 选择、回车确认后，HUD 待选 3→2 并显示每次击杀 +1；U 返回战斗后真实点击开火，弹匣 30→29。随后在蓝图设计器确认了可编辑的三个绑定控件及正确父类。没有将反射调用当作真实按键验收，也未修改临时预览卡池对应的保存资产。
+- 首次 Python 直接调用 MCP-only UMG API 的生成失败，以及首次新增测试错误调用 ProgressBar.get_percent 的失败均已修正，失败日志保留；生成逻辑改用 Editor 专用库，测试读取反射属性 percent。中途用户要求 UI 目录后，已完成迁移并重新编译、校验和运行最终回归。
+
+最终双人完整日志仍有 **1 Error、7 Warning**：PixelStreaming2RTC 启动错误 1，出生蒙太奇失败 6、MCP 许可提示 1。单人及设计器检查完整日志为 **2 Error、5 Warning**：同一 PixelStreaming2 错误、工具客户端重连期间 MCP Unknown session id 错误；MCP 许可、HTTP 连通性超时和 UMGEditor 默认快捷键冲突提示各 1，退出时未完成 HTTP 请求提示 2。两者均无 Fatal／Ensure／断言／蓝图运行时异常／LogScript 警告／Python Traceback。开火时仍观察到既有 MusicManager 缺失屏幕提示。
+
+本轮 HUD 和目录整理的受影响功能验证通过，项目整体无报错门槛仍未通过。未执行正式打包、手柄实机、按住开火时切换菜单、焦点切换和独立进程／高延迟场景；本轮单人预览暂停刷怪，不代表战斗压力测试。修改尚未提交。
 
 ## 火力积累与继续验收（2026-10-30）
 

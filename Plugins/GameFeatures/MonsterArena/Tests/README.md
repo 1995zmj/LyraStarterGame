@@ -11,8 +11,11 @@
 | `../Source/MonsterArenaRuntime/Private/Tests/MonsterArenaLifecycleTest.cpp` | 真实怪物击杀与自动复活，检查已选永久奖励、未选候选和即时奖励不重复发放 |
 | `../Source/MonsterArenaEditor/Private/Tests/MonsterArenaRewardTestLibrary.h/.cpp` | 启停真实 PIE、枚举 PIE World、施加正常 GAS 伤害、查询输入锁和伤害免疫状态的 Editor 测试桥接 |
 | `Python/validate_monster_arena_editor.py` | Editor 模块和 Python 配置接口校验 |
+| `Python/validate_monster_arena_hud.py` | 保存的 HUD Widget Blueprint 父类、必要控件绑定与编译校验；命令行用法与 Editor 配置校验相同 |
+| `Python/validate_reward_screen_blueprint.py` | 选卡页、独立卡牌、效果行的 Widget Blueprint 父类和必要控件绑定、编译及 HUD 默认类绑定检查 |
 | `Python/validate_csv_configuration.py` | CSV 重复导入、每条行为资产值、配置引用、等级断档／负经验／重复 ID／未知行为／悬空卡牌引用／空行为／非法数值和合计越界校验；使用 Editor 配置校验的命令行入口替换脚本路径 |
 | `Python/validate_reward_multiplayer.py` | 两名玩家的监听服务器／客户端 PIE 选卡、复制和界面生命周期回归 |
+| `Python/reward_card_view_cases.py` | 双人入口调用：实际卡牌与效果行蓝图实例、候选快照、七条行为合并成六行、比例格式、重复配置与只显示不发奖检查 |
 | `Python/kill_accumulation_cases.py` | 由双人回归入口调用：使用导入的火力积累卡验证怪物／玩家击杀、重复通知、叠卡、队友／自杀排除、复活、复制和新对局清零 |
 | `Python/preview_reward_ui.py` | 保持编辑器运行的单人选卡界面预览，供真实鼠标、键盘、手柄和画面验收 |
 | [ACCEPTANCE.md](ACCEPTANCE.md) | 实际验收证据、结果及未完成项 |

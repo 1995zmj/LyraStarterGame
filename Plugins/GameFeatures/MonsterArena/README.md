@@ -1,5 +1,15 @@
 # MonsterArena
 
+界面开发遵循仓库 [界面制作规范](../../../AGENTS.md#界面制作规范)，涵盖目录归属、C++／蓝图职责、子控件组合、数据事件、资源生成迁移与运行验收。以下为本玩法的具体绑定约定。
+
+HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `UMonsterArenaHUD`。在 Widget Blueprint Designer 调整布局、字体和颜色；保留 `Status`（TextBlock）、`ExperienceBar`（ProgressBar）、`Reward`（TextBlock）的名称和类型，供 C++ `BindWidget` 绑定。`Public/UI/MonsterArenaHUD.h` 声明 HUD，`Private/UI/MonsterArenaHUD.cpp` 更新成长显示，`Private/UI/MonsterArenaHUDInput.cpp` 管理选卡输入、弹窗与输入锁。刷怪组件通过 `HUDClass` 引用蓝图类，默认使用该界面。
+
+资源生成入口为 `Content/Python/setup_monster_arena_hud.py`，只在资源不存在时创建布局，已有设计器调整不会被重置；创建和校验代码位于 MonsterArenaEditor 的 `Public/UI`、`Private/UI/MonsterArenaHUDLibrary`。完整资源初始化脚本也会调用该入口。UI 源码统一放在各模块的 `Public/UI` 和 `Private/UI`，UI 资源放在 `Content/UI`；测试继续放在模块 `Private/Tests` 与插件 `Tests`。
+
+选卡界面使用三级组合：`W_MonsterArenaRewardScreen` → `W_MonsterArenaRewardCard` → `W_MonsterArenaRewardStat`。页面保留 `Card1..3` 三个独立卡牌实例，以及 `PendingText`、`FeedbackText`、`ConfirmButton`、`CloseButton`；单卡保留 `SelectButton`、`CardBorder`、`ChoiceNumber`、`CardTitle`、`CardDescription`、`CardStack`、`EffectsBox`；效果行保留 `EffectName`、`EffectValue`、`EffectPreview`。这些名字和类型供 native BindWidget 绑定，布局、字体和样式由各自蓝图设计器控制。
+
+页面通过 Card.Configure 传入候选快照，卡牌为每种行为生成效果行，同类行为合计；Card.OnSelected 仅通知页面选择索引，服务端确认仍由页面的原有流程处理。卡牌／效果行不发放奖励，也不持有旧对局的成长组件引用。选中／未选中底色位于卡牌蓝图 Class Defaults 的 MonsterArena → Style。生成入口 `Content/Python/setup_monster_arena_reward_screen.py` 依次创建效果行、卡牌与页面，保留已有子蓝图编辑；对于旧页面，仅替换旧的三张内嵌卡牌并保留页面其他布局。生成和迁移代码仅位于 Editor/UI。
+
 步枪击杀怪物 → 获得局内经验 → 升级积攒选卡次数 → 玩家手动打开三选一 → 确认后获得强化。
 
 ## 运行与操作
@@ -50,7 +60,7 @@ MonsterArena 通过 Lyra QuickBar 添加并选择步枪，射击、换弹和 HUD
 
 ## 代码与资源归属
 
-- `MonsterArenaRuntime`：成长状态、卡池、奖励效果、怪物、HUD，以及 `UMonsterArenaRewardScreen` CommonUI 界面。HUD 实现在 `Private/MonsterArenaHUD.cpp`，选卡界面实现在 `Private/MonsterArenaRewardScreen.cpp`。原生默认布局可以直接运行，`RewardScreenClass` 提供界面子类入口。
+- `MonsterArenaRuntime`：成长状态、卡池、奖励效果、怪物，以及 `Public/UI`、`Private/UI` 下的 HUD 和 CommonUI 选卡界面。HUD 使用 `W_MonsterArenaHUD` 的设计器布局；选卡界面实现在 `Private/UI/MonsterArenaRewardScreen.cpp`，`RewardScreenClass` 提供界面子类入口。独立的 `MonsterArenaRewardInputAction.h/.cpp` 定义选卡快捷键 Action。
 - `MonsterArenaEditor`：`UMonsterArenaContentLibrary` 资源配置接口，以及 `Private/Tests/` 下的编辑器测试桥接。Runtime 不依赖 Editor；Editor 模块不进入游戏运行时目标。
 - `Content/Python/setup_monster_arena.py`：创建和配置插件专属 GameFeatureData、Experience、地图和玩法入口；已有 Experience 和地图布置保留。
 - `UMonsterArenaComponent`：刷怪间隔、存活上限和怪物类。`AArenaMonster`：初始生命、经验奖励和近战伤害，使用独立 ASC，无需怪物 PlayerState。
