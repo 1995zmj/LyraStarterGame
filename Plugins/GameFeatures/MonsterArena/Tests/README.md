@@ -10,6 +10,8 @@
 | `../Source/MonsterArenaRuntime/Private/Tests/MonsterArenaAmmoTest.cpp` | 自动射击、松开停火、空弹匣和换弹回归 |
 | `../Source/MonsterArenaRuntime/Private/Tests/MonsterArenaLifecycleTest.cpp` | 真实怪物击杀与自动复活，检查已选永久奖励、未选候选和即时奖励不重复发放 |
 | `../Source/MonsterArenaEditor/Private/Tests/MonsterArenaRewardTestLibrary.h/.cpp` | 启停真实 PIE、枚举 PIE World、施加正常 GAS 伤害、查询输入锁和伤害免疫状态的 Editor 测试桥接 |
+| `../Source/MonsterArenaEditor/Private/Tests/MonsterArenaAITestLibrary.h/.cpp` | StateTree 测试用怪物生成、活动状态与目标查询、视线遮挡体；仅存在于 Editor 模块 |
+| `Python/validate_monster_statetree.py` | 双人实际 StateTree 追逐、近战、冷却、遮挡、目标切换、服务端执行／客户端复制、死亡复活和重进验收 |
 | `Python/validate_monster_arena_editor.py` | Editor 模块和 Python 配置接口校验 |
 | `Python/validate_monster_arena_hud.py` | 保存的 HUD Widget Blueprint 父类、必要控件绑定与编译校验；命令行用法与 Editor 配置校验相同 |
 | `Python/validate_reward_screen_blueprint.py` | 选卡页、独立卡牌、效果行的 Widget Blueprint 父类和必要控件绑定、编译及 HUD 默认类绑定检查 |
@@ -18,6 +20,7 @@
 | `Python/reward_card_view_cases.py` | 双人入口调用：实际卡牌与效果行蓝图实例、候选快照、七条行为合并成六行、比例格式、重复配置与只显示不发奖检查 |
 | `Python/kill_accumulation_cases.py` | 由双人回归入口调用：使用导入的火力积累卡验证怪物／玩家击杀、重复通知、叠卡、队友／自杀排除、复活、复制和新对局清零 |
 | `Python/preview_reward_ui.py` | 保持编辑器运行的单人选卡界面预览，供真实鼠标、键盘、手柄和画面验收 |
+| `Python/preview_monster_ai.py` | 保留一个正常怪物的单人战斗预览，供真实射击／追逐画面验收；不赋予无敌、不自动开火 |
 | [ACCEPTANCE.md](ACCEPTANCE.md) | 实际验收证据、结果及未完成项 |
 
 ## 运行 Runtime 玩法测试
@@ -51,6 +54,22 @@ Runtime C++ 测试及调用入口受 `WITH_DEV_AUTOMATION_TESTS` 保护。当前
 ```
 
 成功输出 `MONSTER_ARENA_EDITOR_MODULE_VALIDATION_SUCCEEDED`。脚本使用临时对象，不修改已保存资源。资源生成工具 `Content/Python/setup_monster_arena.py` 继续放在工具目录。
+
+## 运行 StateTree AI 验收
+
+先执行 `Content/Python/setup_monster_arena_ai.py` 生成资产；使用上面的 Editor 配置校验命令替换脚本路径即可。该工具保存资源，运行前须保存工作并关闭使用该资产的其他编辑器进程，不能和 PIE 进程同时写同一资产。完成后运行：
+
+```powershell
+& "$UE/Engine/Binaries/Win64/UnrealEditor.exe" "$PWD/LyraStarterGame.uproject" /MonsterArena/Maps/L_MonsterArena -ExecutePythonScript="$PWD/Plugins/GameFeatures/MonsterArena/Tests/Python/validate_monster_statetree.py" -unattended -nosplash -SCCProvider=None -abslog="$PWD/Saved/Logs/MonsterArenaStateTreeNetwork.log"
+```
+
+必须带竞技场地图参数。Lyra 前端地图的 `ForceStandaloneNetMode` 会覆盖测试请求的网络模式，造成两个独立单机窗口，不能作为多人测试。脚本等待监听服务器和客户端都出现两个玩家后才开始断言；整体超时 240 秒，结束时正常关闭两个 PIE 会话和编辑器。
+
+检查实际 StateTree 活动状态、追逐位移和客户端复制、客户端不运行 AI、GAS 近战数值／冷却／遮挡、最近存活目标切换、无目标 Idle、目标死亡与复活、怪物死亡停止树及一次击杀结算、复制销毁和重新进入对局。测试设置临时位置和遮挡体，部分条件检查时只冻结移动、保留树运行；不保存这些世界改动。成功标记为 `MONSTER_ARENA_STATETREE_SUCCEEDED`，结构化结果在 `Saved/Logs/MonsterArenaStateTreeResult.json`。这些反射检查不替代真实战斗输入及画面验收。
+
+将入口替换为 `Tests/Python/preview_monster_ai.py` 可启动单人交互预览。该入口只在临时 PIE 世界停止自动补怪，移除已有怪物并在玩家正前方生成一个正常怪物；保留默认生命、伤害、移动和 StateTree，不授予经验、不自动射击、不暂停世界。看到 `MONSTER_ARENA_AI_PREVIEW_READY` 后用真实输入检查移动、追逐、受伤及步枪击杀和经验。预览保持运行，需通过正常编辑器操作退出；仅表示准备就绪，不代表验收通过。
+
+可选 `-MonsterArenaFixedAimPreview` 会在临时世界持续调整相机瞄准该怪物，直到怪物移除或 PIE 结束；仍需实际点击才能开火。它用于隔离检查实弹命中、死亡与经验结算，不能作为正常手动瞄准或鼠标转向验收。此选项只属于测试脚本，正式玩法不包含该功能。
 
 ## 运行双人选卡 PIE 回归
 

@@ -2,6 +2,18 @@
 
 更新日期：2026-11-01，时区 Asia/Shanghai。以下按轮次保留历史结果。
 
+## 怪物 AI 迁移到 StateTree（2026-11-01）
+
+- 删除 `AArenaMonster::Tick` 的目标搜索／追逐／攻击分支，关闭 Actor Tick。新增 `/MonsterArena/AI/ST_ArenaMonster`，通过服务端 `UStateTreeComponent` 执行：Root 按条件优先选择 Melee、Chase、Idle，各状态通过资产中的转换回到 Root 重选。Evaluator 默认每 0.2 秒搜索最近存活玩家；任务分别执行移动与调用近战接口。本体保留 GAS 伤害校验／冷却、生命、死亡和经验结算；死亡和 EndPlay 停止树、清理目标。直线移动保留，未加入导航寻路。
+- Runtime 节点在 `Public/AI`、`Private/AI`；资源生成／编译在 MonsterArenaEditor 的 `Public/AI`、`Private/AI`。测试桥接集中在 Editor `Private/Tests`，脚本在插件 `Tests/Python`。启用 StateTree／GameplayStateTree 依赖，Runtime 未加入 Editor 依赖。完整初始化调用 `Content/Python/setup_monster_arena_ai.py`，已有树不覆盖重建。
+- 最终编辑器目标编译成功，Python 语法检查通过。`MonsterArenaStateTreeSetupR4.log`：通过 UE 5.8 编译管理器保存资产，验证编译哈希非零、EditorData 不脏、运行数据就绪及重复调用，退出码 0；完整日志 Error／Warning／Fatal／Ensure／断言／脚本异常均为 0。此前 Setup R3 也通过，最终改用编译管理器统一维护编译元数据，不手工填写哈希。
+- `MonsterArenaStateTreeNetworkR4.log`：最终资产及代码下 **40 项双人 PIE 检查通过**，包含 Actor Tick 禁用、实际 Chase 移动及复制、客户端不运行 AI、真实 GAS 近战伤害／间隔／遮挡、目标切换、无目标 Idle、目标死亡及新 Pawn 复活、怪物死亡立即停树与一次击杀结算、服务端／客户端销毁、退出并重新进入对局后的新实例运行。结构化结果 `Saved/Logs/MonsterArenaStateTreeResult.json` 为 `passed=true`，另存 `MonsterArenaStateTreeNetworkR4Result.json`，两个 PIE 会话和编辑器均正常退出。
+- `MonsterArenaStateTreeRewards.log`：**135 项既有双人经验／选卡／火力积累／生命周期回归通过**。测试怪物夹具由关闭 Actor Tick 改为显式停止 StateTree。结果另存 `Saved/Logs/MonsterArenaStateTreeRewardResult.json`。此轮在最终仅补齐近战朝向前执行；补齐后重新执行了上面的全部 AI 检查。
+- `MonsterArenaStateTreeVisualR3.log`：通过 computer-use 实际鼠标开火，观察到弹药消耗、命中伤害数字、怪物受伤、玩家被近战击杀及正常复活，继续开火后怪物死亡／销毁，HUD 更新为经验 `20/60`、击杀 `1`；出现 `MONSTER_ARENA_AI_PREVIEW_TARGET_REMOVED`，预览和编辑器正常窗口退出。该临时世界仅保留一个正常怪物，停止补怪；使用明确的 `-MonsterArenaFixedAimPreview` 测试选项持续调整相机瞄准，不自动开火、不赋予无敌、不修改生命／伤害／移动参数、不预先授予经验，也不保存世界。此结果验证真实开火与结算，不代表正常手动瞄准／鼠标转向验收。
+- 失败记录保留：初次链接缺少 PropertyBindingUtils 依赖，补齐后编译通过；首次资源创建对不存在资产执行 LoadObject 产生警告，改为先检查包是否存在。Setup R2 因同时运行的 PIE 进程占用资产而保存失败，改为顺序执行后的 R3 通过。首轮网络入口误从前端地图启动，被 ForceStandaloneNetMode 改为两个独立单机并超时；之后显式带竞技场地图，R2、R3 双人通过。首次交互预览使用了 Python 不暴露的 Controller.get_pawn，改为从 PlayerState 获取；Visual R2 的启动超时判断误覆盖长期试玩，限定为准备阶段后 Visual R3 无脚本异常。上述失败不计作通过。
+- 最终完整日志：AI Network R4 为 **1 Error／17 Warning**，Reward 为 **1 Error／14 Warning**，Visual R3 为 **1 Error／11 Warning**。Error 均为既有 PixelStreaming2RTC `GEngine is not valid`。AI 警告为音频采样率 10、出生蒙太奇 6、MCP 许可 1；Reward 为音频 6、出生蒙太奇 6、MCP 许可 1、HTTP 超时 1；Visual 为音频 4、MCP 许可 1、HTTP 超时及退出请求提示 6。三轮 Fatal／Ensure／断言／蓝图运行时异常／LogScript 警告／Python Traceback 均为 0。真实开火时仍观察到既有 MusicManager 缺失屏幕提示。Visual R3 后仅调整了 Editor 资产编译入口并重存资产，Runtime 逻辑未再修改，重存后另执行 AI Network R4。
+- 本轮 StateTree 功能回归及固定瞄准下的真实开火验收通过；项目整体无报错门槛仍未通过。正常手动瞄准／鼠标转向、手柄实机、正式打包、专用服务器独立进程、高延迟／丢包、复杂障碍导航和大规模怪物压力测试未执行。本轮实现、资源、测试和验收记录随本次提交提供。
+
 ## 独立卡牌与可复用效果行（2026-11-01）
 
 - 参考 `W_PlayerTile.Configure` 向 `W_Powerup_Stat.Configure` 传数据的组合结构，新增 `W_MonsterArenaRewardCard` 和 `W_MonsterArenaRewardStat`。对应 C++ 全在 Runtime/UI，创建／校验工具在 Editor/UI。原来的选卡页仅绑定 Card1／Card2／Card3 和页面级确认／关闭控件；卡牌通过 Configure 接收快照，以 OnSelected 回传索引；效果行接收行为、合计值和预览，不处理奖励发放。

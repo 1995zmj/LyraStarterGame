@@ -16,7 +16,23 @@ HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `U
 
 编译 `LyraEditor Win64 Development` 后重新打开编辑器。在内容浏览器启用插件内容，打开 `/MonsterArena/Maps/L_MonsterArena` 并运行 PIE。该地图使用 `/MonsterArena/System/Experiences/B_MonsterArena`，启用 ShooterCore 和 MonsterArena。玩法入口资源为 `/MonsterArena/System/Playlists/DA_MonsterArena`。
 
-每个新角色自动装备步枪。方块怪物从四个 `MonsterSpawn` 标签出生点生成，每 2 秒补充一只，同时最多 6 只。怪物生命 60、移动速度 220，直接追逐玩家，140 单位内每秒近战造成 10 点伤害。直线追逐适用于当前开阔地图；复杂场景需要接入导航。
+每个新角色自动装备步枪。方块怪物从四个 `MonsterSpawn` 标签出生点生成，每 2 秒补充一只，同时最多 6 只。怪物生命 60、移动速度 220，140 单位内每秒近战造成 10 点伤害。AI 由 `/MonsterArena/AI/ST_ArenaMonster` 驱动，怪物 Actor Tick 已禁用。直线追逐适用于当前开阔地图；复杂场景仍需另行接入导航。
+
+## 怪物 StateTree
+
+`AArenaMonster` 的 `StateTreeComponent` 仅在服务端完成生命组件初始化后启动，客户端只接收角色移动和生命复制。`StateTreeAsset` 可配置使用的树，默认指向 `ST_ArenaMonster`；感知半径、近战距离、攻击间隔分别由 `DetectionRadius`、`MeleeRange`、`AttackInterval` 配置。
+
+树中包含三个状态，条件和转换可在 StateTree 编辑器中调整：
+
+| 状态 | 进入条件与执行 | 转换 |
+| --- | --- | --- |
+| `Melee` | 优先选择，目标存活且进入近战范围；调用受冷却和视线遮挡校验的 GAS 伤害接口 | 目标无效或离开近战范围时回到 Root 重选 |
+| `Chase` | 存在有效目标；任务持续提交直线移动输入 | 目标无效或进入近战范围时回到 Root 重选 |
+| `Idle` | 没有可选择的战斗状态；停止残留移动 | 获得有效目标后回到 Root 重选 |
+
+全局 `Find nearest living player` Evaluator 默认每 0.2 秒寻找感知范围内最近的存活玩家；目标死亡或离开感知范围时提前重新搜索。状态选择由资产中的 Enter Conditions 和 Transitions 决定，不再由怪物本体的 Update／Tick 判断。StateTree 自身仍会更新条件和任务；追逐任务的 Tick 负责执行移动，近战任务调用伤害接口，不包含整套 AI 状态分支。攻击冷却在切换目标或反复进出近战范围时不会重置。怪物死亡及 EndPlay 停止树并清理目标，原有经验／击杀结算不变。
+
+节点代码位于 Runtime 的 `Public/AI`、`Private/AI/MonsterArenaStateTreeNodes`。Editor 专用 `MonsterArenaStateTreeLibrary` 和 `Content/Python/setup_monster_arena_ai.py` 创建并编译资产；完整初始化脚本也会调用。已存在的树保留设计器修改，生成器不重建覆盖。运行生成脚本前结束其他进程对该资产的使用，避免 Windows 文件占用导致保存失败。
 
 每只怪物给予击杀玩家 20 XP。初始 1 级，经验门槛依次为 60、100、140、180、220、260、300、340、380，最高 10 级。经验溢出保留，可连续升级；每升一级增加一次选卡机会。达到等级上限不会清除尚未使用的机会。
 
@@ -63,7 +79,7 @@ MonsterArena 通过 Lyra QuickBar 添加并选择步枪，射击、换弹和 HUD
 - `MonsterArenaRuntime`：成长状态、卡池、奖励效果、怪物，以及 `Public/UI`、`Private/UI` 下的 HUD 和 CommonUI 选卡界面。HUD 使用 `W_MonsterArenaHUD` 的设计器布局；选卡界面实现在 `Private/UI/MonsterArenaRewardScreen.cpp`，`RewardScreenClass` 提供界面子类入口。独立的 `MonsterArenaRewardInputAction.h/.cpp` 定义选卡快捷键 Action。
 - `MonsterArenaEditor`：`UMonsterArenaContentLibrary` 资源配置接口，以及 `Private/Tests/` 下的编辑器测试桥接。Runtime 不依赖 Editor；Editor 模块不进入游戏运行时目标。
 - `Content/Python/setup_monster_arena.py`：创建和配置插件专属 GameFeatureData、Experience、地图和玩法入口；已有 Experience 和地图布置保留。
-- `UMonsterArenaComponent`：刷怪间隔、存活上限和怪物类。`AArenaMonster`：初始生命、经验奖励和近战伤害，使用独立 ASC，无需怪物 PlayerState。
+- `UMonsterArenaComponent`：刷怪间隔、存活上限和怪物类。`AArenaMonster`：初始生命、经验奖励和近战伤害，使用独立 ASC，无需怪物 PlayerState；AI 使用本插件的 StateTree 和独立节点代码。
 
 专用蓝图和配置位于 `/MonsterArena/`：`UI/Notifications` 保存击杀播报，`UI/Weapons` 保存准星，`Weapons` 保存物品定义，`Characters/B_MonsterArenaShooterHero` 继承共享射击角色并覆盖本地初始物品。`System/HeroData_MonsterArena` 和 `System/Experiences/LAS_MonsterArena_Components` 将它们接入对局。通用枪械能力、模型、动画和基础 HUD 继续复用 ShooterCore。
 

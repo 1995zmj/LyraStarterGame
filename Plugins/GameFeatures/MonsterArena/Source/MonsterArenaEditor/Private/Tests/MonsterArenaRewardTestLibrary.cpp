@@ -13,6 +13,7 @@
 #include "UI/MonsterArenaHUD.h"
 #include "UI/MonsterArenaRewardCard.h"
 #include "Components/Button.h"
+#include "Components/StateTreeComponent.h"
 #include "UI/MonsterArenaRewardScreen.h"
 #include "PlayInEditorDataTypes.h"
 #include "RunProgressionComponent.h"
@@ -172,7 +173,7 @@ bool UMonsterArenaRewardTestLibrary::KillTestMonster(APawn* Source)
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	AArenaMonster* Monster = Source->GetWorld()->SpawnActor<AArenaMonster>(AArenaMonster::StaticClass(), Source->GetActorLocation() + FVector(500, 0, 0), FRotator::ZeroRotator, Params);
 	if (!Monster) { return false; }
-	Monster->SetActorTickEnabled(false);
+	Monster->StateTreeComponent->StopLogic(TEXT("Reward attribution fixture"));
 	const bool bApplied = DealAttributedDamage(Source, Monster, 10000.0f);
 	URunProgressionComponent* Progress = Source->GetPlayerState()->FindComponentByClass<URunProgressionComponent>();
 	const int32 Kills = Progress->State.Kills;
