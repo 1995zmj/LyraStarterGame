@@ -18,7 +18,7 @@ cls = unreal.load_class(None, "/MonsterArena/Data/B_MonsterArenaProgression.B_Mo
 assert unreal.get_default_object(cls).get_editor_property("definition") == definition
 # Execute only the validation phase against temporary sources. Any malformed
 # source must fail before the first Unreal module/asset mutation operation.
-prefix = script.read_text(encoding="utf-8-sig").split('unreal.load_module("MonsterArenaRuntime")')[0]
+validator = runpy.run_path(str(script), run_name="progression_validation")["validate"]
 with tempfile.TemporaryDirectory() as temporary:
     target = pathlib.Path(temporary)
     (target / "Data").mkdir()
@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory() as temporary:
         for name, original in originals.items():
             (target / "Data" / name).write_text(bad if name == filename else original, encoding="utf-8")
         try:
-            exec(compile(prefix, str(script), "exec"), {"__file__": str(fake_script)})
+            validator(target / "Data")
         except ValueError:
             pass
         else:
@@ -51,8 +51,7 @@ with tempfile.TemporaryDirectory() as temporary:
         (target / "Data" / name).write_text(original, encoding="utf-8")
     with (target / "Data/RewardActions.csv").open("a", encoding="utf-8") as stream:
         stream.write("Balance,DamageBonus,2\n")
-    namespace = {"__file__": str(fake_script)}
-    exec(compile(prefix, str(script), "exec"), namespace)
+    namespace = validator(target / "Data")
     assert namespace["actions"]["balance"] == [("MaxHealthBonus", 10), ("DamageBonus", 1), ("HealAmount", 10), ("DamageBonus", 2)]
 # Check every imported action, not just the number of cards.
 expected_actions = {}

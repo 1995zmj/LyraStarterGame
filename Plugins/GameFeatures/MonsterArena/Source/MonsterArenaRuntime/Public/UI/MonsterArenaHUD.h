@@ -50,6 +50,7 @@ protected:
 	TObjectPtr<UInputMappingContext> RewardMapping;
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> OpenRewardAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> WaveAction;
 	UPROPERTY(Transient)
 	TObjectPtr<UEnhancedInputComponent> RewardInput;
 	int32 LastLevel = 1;
@@ -58,6 +59,7 @@ private:
 	UFUNCTION()
 	void RefreshProgression();
 	void ToggleRewardMenu();
+	void RequestWaveAction();
 	void TryOpenRewardMenu();
 	void EnsureInputMapping();
 	void ReleaseRewardInputBlock();

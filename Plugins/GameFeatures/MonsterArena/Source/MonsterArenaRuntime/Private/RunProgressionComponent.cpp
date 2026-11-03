@@ -1,4 +1,6 @@
 #include "RunProgressionComponent.h"
+#include "ArenaWaveDirectorComponent.h"
+#include "GameFramework/GameStateBase.h"
 
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
 #include "AbilitySystem/Attributes/LyraCombatSet.h"
@@ -18,6 +20,28 @@
 #include "Player/LyraPlayerState.h"
 
 #define LOCTEXT_NAMESPACE "MonsterArenaProgression"
+
+void URunProgressionComponent::RequestWaveAction(int32 RunId, int32 WaveIndex)
+{
+	ServerWaveAction(RunId, WaveIndex);
+}
+
+void URunProgressionComponent::ServerWaveAction_Implementation(int32 RunId, int32 WaveIndex)
+{
+	APlayerState* Player = Cast<APlayerState>(GetOwner());
+	AGameStateBase* GS = GetWorld()->GetGameState();
+	UArenaWaveDirectorComponent* Director = GS ? GS->FindComponentByClass<UArenaWaveDirectorComponent>() : nullptr;
+	if (!Director || !Player || !IsPlayerReady() || State.bRewardMenuOpen) { return; }
+	if ((Director->State.Phase == EArenaWavePhase::Victory || Director->State.Phase == EArenaWavePhase::Defeat)
+		&& RunId == Director->State.RunId && WaveIndex == Director->State.WaveIndex)
+	{
+		Director->ResetRun();
+	}
+	else if (!Director->RequestNextWave(Player->GetPawn(), RunId, WaveIndex))
+	{
+		ClientRewardRequestFailed(LOCTEXT("WaveDenied", "无法开始：请关闭选卡并靠近核心，检查波次状态与出生入口。"));
+	}
+}
 
 namespace
 {

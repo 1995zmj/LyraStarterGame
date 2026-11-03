@@ -1,4 +1,9 @@
 #include "ArenaMonster.h"
+#include "ArenaDefenseCore.h"
+#include "ArenaWaveDirectorComponent.h"
+#include "NavigationSystem.h"
+#include "NavigationPath.h"
+#include "Net/UnrealNetwork.h"
 
 #include "ArenaMeleeDamageEffect.h"
 #include "Components/StateTreeComponent.h"
@@ -83,6 +88,7 @@ void AArenaMonster::HandleOutOfHealth(AActor* InstigatorActor, AActor* Causer, c
 		return;
 	}
 	bDeathSettled = true;
+	if (WaveDirector.IsValid()) { WaveDirector->NotifyMonsterDeath(this); }
 	StateTreeComponent->StopLogic(TEXT("Monster died"));
 	AITarget.Reset();
 	AActor* Source = Spec ? Spec->GetContext().GetOriginalInstigator() : InstigatorActor;
@@ -121,6 +127,7 @@ bool AArenaMonster::IsAliveForAI() const
 
 bool AArenaMonster::IsValidAITarget(const APawn* Target) const
 {
+	if (DefenseTarget && Target == DefenseTarget) { return IsValid(DefenseTarget) && DefenseTarget->Health > 0; }
 	const ULyraHealthComponent* Health = ULyraHealthComponent::FindHealthComponent(Target);
 	return IsValid(Target) && Target->IsPlayerControlled() && Health && Health->GetHealth() > 0.0f && !Health->IsDeadOrDying()
 		&& FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) <= FMath::Square(DetectionRadius);
@@ -144,6 +151,7 @@ void AArenaMonster::TryMeleeAttack()
 	FHitResult Hit;
 	if (!GetWorld()->LineTraceSingleByChannel(Hit, GetActorLocation(), Target->GetActorLocation(), ECC_Visibility, Params) || Hit.GetActor() == Target)
 	{
+		if (AArenaDefenseCore* Core = Cast<AArenaDefenseCore>(Target)) { Core->ApplyEnemyDamage(MeleeDamage); return; }
 		if (UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target))
 		{
 			FGameplayEffectSpecHandle DamageSpec = AbilitySystem->MakeOutgoingSpec(UArenaMeleeDamageEffect::StaticClass(), 1.0f, AbilitySystem->MakeEffectContext());
@@ -154,4 +162,56 @@ void AArenaMonster::TryMeleeAttack()
 			}
 		}
 	}
+}
+
+void AArenaMonster::UpdateNavigation(float DeltaTime)
+{
+	if (!IsAliveForAI() || !IsValidAITarget(AITarget.Get())) { return; }
+	// Standalone legacy monsters keep their existing open-arena behavior.
+	FVector Destination = AITarget->GetActorLocation();
+	if (DefenseTarget)
+	{
+		PathRemaining -= DeltaTime;
+		if (PathRemaining <= 0)
+		{
+			PathRemaining = 0.5f;
+			if (FVector::DistSquared2D(LastNavigationPosition, GetActorLocation()) < FMath::Square(10.0f)) { StuckTime += 0.5f; }
+			else { StuckTime = 0; }
+			LastNavigationPosition = GetActorLocation();
+			if (StuckTime >= 15) { Destroy(); return; } // Director requeues without awarding XP.
+			PathPoints.Reset(); PathIndex = 1;
+			if (UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(), GetActorLocation(), Destination, this))
+			{
+				if (Path->IsValid() && !Path->IsPartial()) { PathPoints = Path->PathPoints; }
+			}
+		}
+		while (PathPoints.IsValidIndex(PathIndex) && FVector::DistSquared2D(GetActorLocation(), PathPoints[PathIndex]) < FMath::Square(50.0f)) { ++PathIndex; }
+		if (!PathPoints.IsValidIndex(PathIndex)) { return; }
+		Destination = PathPoints[PathIndex];
+	}
+	const FVector Direction = (Destination - GetActorLocation()).GetSafeNormal2D();
+	SetActorRotation(Direction.Rotation());
+	AddMovementInput(Direction, 1.0f, true);
+}
+
+APawn* AArenaMonster::ResolveWaveTarget(APawn* Candidate)
+{
+	if (!DefenseTarget || !IsValidAITarget(DefenseTarget)) { return Candidate; }
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (bHunter)
+	{
+		if (AITarget.IsValid() && AITarget.Get() != DefenseTarget && IsValidAITarget(AITarget.Get()) && Now < TargetHoldUntil) { return AITarget.Get(); }
+		TargetHoldUntil = Now + 2;
+		return Candidate ? Candidate : DefenseTarget.Get();
+	}
+	if (AITarget.IsValid() && AITarget.Get() != DefenseTarget && Now >= TargetHoldUntil) { IgnorePlayersUntil = Now + 2; }
+	if (Now < IgnorePlayersUntil || !Candidate || FVector::DistSquared(GetActorLocation(), Candidate->GetActorLocation()) > FMath::Square(250.0f)) { return DefenseTarget; }
+	if (AITarget.Get() == DefenseTarget || !AITarget.IsValid()) { TargetHoldUntil = Now + 3; }
+	return Candidate;
+}
+
+void AArenaMonster::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AArenaMonster, bHunter);
 }

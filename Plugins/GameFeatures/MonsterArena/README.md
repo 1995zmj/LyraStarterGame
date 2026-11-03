@@ -1,5 +1,9 @@
 # MonsterArena
 
+CSV 配置统一通过编辑器 **Tools → MonsterArena CSV 配置** 管理，支持全量／分组校验和导入。注册清单为 `Data/ConfigRegistry.json`，当前接管成长奖励与守点波次共 5 张表；新增配置组的接入方法见 [配置说明](Data/README.md)。
+
+守点 HUD 的 `Status` 首行显示“大本营血量：当前 / 上限”，核心引用尚未同步时显示“等待同步”。当前血量与上限均由服务端复制，受伤、摧毁和重置后使用权威值刷新；保留原有蓝图布局与控件绑定。
+
 界面开发遵循仓库 [界面制作规范](../../../AGENTS.md#界面制作规范)，涵盖目录归属、C++／蓝图职责、子控件组合、数据事件、资源生成迁移与运行验收。以下为本玩法的具体绑定约定。
 
 HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `UMonsterArenaHUD`。在 Widget Blueprint Designer 调整布局、字体和颜色；保留 `Status`（TextBlock）、`ExperienceBar`（ProgressBar）、`Reward`（TextBlock）的名称和类型，供 C++ `BindWidget` 绑定。`Public/UI/MonsterArenaHUD.h` 声明 HUD，`Private/UI/MonsterArenaHUD.cpp` 更新成长显示，`Private/UI/MonsterArenaHUDInput.cpp` 管理选卡输入、弹窗与输入锁。刷怪组件通过 `HUDClass` 引用蓝图类，默认使用该界面。
@@ -16,7 +20,7 @@ HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `U
 
 编译 `LyraEditor Win64 Development` 后重新打开编辑器。在内容浏览器启用插件内容，打开 `/MonsterArena/Maps/L_MonsterArena` 并运行 PIE。该地图使用 `/MonsterArena/System/Experiences/B_MonsterArena`，启用 ShooterCore 和 MonsterArena。玩法入口资源为 `/MonsterArena/System/Playlists/DA_MonsterArena`。
 
-每个新角色自动装备步枪。方块怪物从四个 `MonsterSpawn` 标签出生点生成，每 2 秒补充一只，同时最多 6 只。怪物生命 60、移动速度 220，140 单位内每秒近战造成 10 点伤害。AI 由 `/MonsterArena/AI/ST_ArenaMonster` 驱动，怪物 Actor Tick 已禁用。直线追逐适用于当前开阔地图；复杂场景仍需另行接入导航。
+每个新角色自动装备步枪。怪物由独立波次导演从四个 `MonsterSpawn` 标签出生点分批生成。靠近圆柱核心（450 单位内），按 `N` 或手柄右方向键开始；预警 3 秒后出怪。每波清场后进入整备，手动启动下一波，第五波清场胜利。核心 1000 生命，被摧毁即失败并清理待生成队列和活怪。胜负后存活玩家可按同一按键重置对局；复活期间可等复活后操作。怪物生命 60、移动速度 220，140 单位内每秒近战造成 10 点伤害。AI 由 `/MonsterArena/AI/ST_ArenaMonster` 驱动，怪物 Actor Tick 已禁用。波次怪物沿导航路径移动；进攻兵优先核心、猎手优先玩家，无存活玩家时都进攻核心。
 
 ## 怪物 StateTree
 
@@ -27,10 +31,10 @@ HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `U
 | 状态 | 进入条件与执行 | 转换 |
 | --- | --- | --- |
 | `Melee` | 优先选择，目标存活且进入近战范围；调用受冷却和视线遮挡校验的 GAS 伤害接口 | 目标无效或离开近战范围时回到 Root 重选 |
-| `Chase` | 存在有效目标；任务持续提交直线移动输入 | 目标无效或进入近战范围时回到 Root 重选 |
+| `Chase` | 存在有效目标；波次怪物沿导航路径移动，孤立旧测试怪保持直线追逐 | 目标无效或进入近战范围时回到 Root 重选 |
 | `Idle` | 没有可选择的战斗状态；停止残留移动 | 获得有效目标后回到 Root 重选 |
 
-全局 `Find nearest living player` Evaluator 默认每 0.2 秒寻找感知范围内最近的存活玩家；目标死亡或离开感知范围时提前重新搜索。状态选择由资产中的 Enter Conditions 和 Transitions 决定，不再由怪物本体的 Update／Tick 判断。StateTree 自身仍会更新条件和任务；追逐任务的 Tick 负责执行移动，近战任务调用伤害接口，不包含整套 AI 状态分支。攻击冷却在切换目标或反复进出近战范围时不会重置。怪物死亡及 EndPlay 停止树并清理目标，原有经验／击杀结算不变。
+全局 `Find nearest living player` Evaluator 默认每 0.2 秒寻找感知范围内最近的存活玩家，再应用波次怪物的核心／玩家优先级及目标保持时限；目标死亡或离开感知范围时提前重新搜索。状态选择由资产中的 Enter Conditions 和 Transitions 决定，不再由怪物本体的 Update／Tick 判断。StateTree 自身仍会更新条件和任务；追逐任务的 Tick 负责执行移动，近战任务调用伤害接口，不包含整套 AI 状态分支。攻击冷却在切换目标或反复进出近战范围时不会重置。怪物死亡及 EndPlay 停止树并清理目标，原有经验／击杀结算不变。
 
 节点代码位于 Runtime 的 `Public/AI`、`Private/AI/MonsterArenaStateTreeNodes`。Editor 专用 `MonsterArenaStateTreeLibrary` 和 `Content/Python/setup_monster_arena_ai.py` 创建并编译资产；完整初始化脚本也会调用。已存在的树保留设计器修改，生成器不重建覆盖。运行生成脚本前结束其他进程对该资产的使用，避免 Windows 文件占用导致保存失败。
 
@@ -79,7 +83,7 @@ MonsterArena 通过 Lyra QuickBar 添加并选择步枪，射击、换弹和 HUD
 - `MonsterArenaRuntime`：成长状态、卡池、奖励效果、怪物，以及 `Public/UI`、`Private/UI` 下的 HUD 和 CommonUI 选卡界面。HUD 使用 `W_MonsterArenaHUD` 的设计器布局；选卡界面实现在 `Private/UI/MonsterArenaRewardScreen.cpp`，`RewardScreenClass` 提供界面子类入口。独立的 `MonsterArenaRewardInputAction.h/.cpp` 定义选卡快捷键 Action。
 - `MonsterArenaEditor`：`UMonsterArenaContentLibrary` 资源配置接口，以及 `Private/Tests/` 下的编辑器测试桥接。Runtime 不依赖 Editor；Editor 模块不进入游戏运行时目标。
 - `Content/Python/setup_monster_arena.py`：创建和配置插件专属 GameFeatureData、Experience、地图和玩法入口；已有 Experience 和地图布置保留。
-- `UMonsterArenaComponent`：刷怪间隔、存活上限和怪物类。`AArenaMonster`：初始生命、经验奖励和近战伤害，使用独立 ASC，无需怪物 PlayerState；AI 使用本插件的 StateTree 和独立节点代码。
+- `UMonsterArenaComponent`：装备、HUD 生命周期与波次导演接入；`WaveDefinition` 引用波次配置。旧 `MaxAliveMonsters <= 0` 仅保留为测试暂停开关，正数不覆盖波次上限；旧 SpawnInterval 已废弃。`AArenaMonster`：初始生命、经验奖励和近战伤害，使用独立 ASC，无需怪物 PlayerState；AI 使用本插件的 StateTree 和独立节点代码。
 
 专用蓝图和配置位于 `/MonsterArena/`：`UI/Notifications` 保存击杀播报，`UI/Weapons` 保存准星，`Weapons` 保存物品定义，`Characters/B_MonsterArenaShooterHero` 继承共享射击角色并覆盖本地初始物品。`System/HeroData_MonsterArena` 和 `System/Experiences/LAS_MonsterArena_Components` 将它们接入对局。通用枪械能力、模型、动画和基础 HUD 继续复用 ShooterCore。
 
@@ -90,3 +94,21 @@ MonsterArena 通过 Lyra QuickBar 添加并选择步枪，射击、换弹和 HUD
 运行命令与测试覆盖见 [Tests/README.md](Tests/README.md)，已执行结果及未完成项见 [Tests/ACCEPTANCE.md](Tests/ACCEPTANCE.md)。Runtime C++ 测试位于 `Source/MonsterArenaRuntime/Private/Tests/`，Editor 测试桥接位于 `Source/MonsterArenaEditor/Private/Tests/`，Python 校验脚本位于 `Tests/Python/`。
 
 无界面断言和反射调用不能替代画面、真实鼠标键盘／手柄输入及网络验收。每次检查完整运行日志：成功标记只代表对应断言完成，不代表整个会话没有 Error、Warning 或蓝图异常。独立 `-game` 和 `-NullRHI` 测试可能出现引擎实验性工具初始化错误或特效空引用警告，需在验收记录中明确区分。
+
+## 守点波次配置
+
+波次数值来源为 `Data/Waves.csv` 与 `Data/WaveSettings.csv`，编辑后运行 `Content/Python/import_waves_csv.py`，生成 `/MonsterArena/Data/DA_ArenaWaves`。运行时读取 DataAsset，不读取磁盘 CSV；直接修改 DataAsset 的数值会在下一次导入时覆盖。`Content/Python/setup_monster_arena_waves.py` 创建缺失的核心和导航边界，保留已有位置，重建导航并调用 CSV 导入。完整 setup 也调用此入口。
+
+| 波次 | 进攻兵 | 猎手 | 存活上限 | 每批数量 | 批次间隔 | 入口数 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 12 | 0 | 6 | 2 | 4 秒 | 1 |
+| 2 | 16 | 4 | 8 | 3 | 4 秒 | 2 |
+| 3 | 22 | 8 | 12 | 4 | 4 秒 | 2 |
+| 4 | 28 | 12 | 16 | 5 | 3.5 秒 | 3 |
+| 5 | 34 | 16 | 20 | 6 | 3 秒 | 4 |
+
+每批内部间隔 0.3 秒。批次间隔从本批最后一只成功生成起计算；达到存活上限等待空位，不追赶积压时间。猎手均匀穿插，入口轮转。生成前校验胶囊空间、导航连通性及距玩家至少 350 单位；失败保留配额并换位置／入口重试，连续受阻 10 秒显示提示并记录一次 Warning，恢复后自动清除提示。不能将生成失败当作清场。
+
+正常死亡在一次性死亡结算时扣减活怪；未死亡即异常销毁的怪物补回配额，不发击杀奖励。追逐中连续 15 秒几乎未位移会回收并补位。新对局与退出先清队列并解绑，再销毁旧怪，避免触发补位。胜负、波次、计数与核心生命由服务端决定并复制；下一波请求带对局／波次编号，经玩家所属组件 RPC 校验，客户端不能指定数量或收益。重置会清局内成长，不代表恢复玩家生命与库存至新开局装载；完整重新入场可退出后重进。
+
+核心为最小灰盒目标，HUD 复用现有 Status 文本显示核心生命、波次、存活／待生成与操作提示；尚未制作独立血条、入口特效、命中特效或完整结算页。原有 U 选卡及世界不暂停规则保留。正常孤立生成的旧测试怪物不绑定核心，继续使用原有 StateTree 追人逻辑。

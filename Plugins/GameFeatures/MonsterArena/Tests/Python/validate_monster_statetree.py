@@ -133,7 +133,13 @@ def run_cases():
 
 def reentry_cases():
     server = next(w for w in session.get_test_worlds() if unreal.SystemLibrary.is_server(w))
-    yield from wait_for(lambda: bool(actors(server, unreal.ArenaMonster)), "New session spawns monsters through normal arena spawner")
+    gs = actors(server, unreal.GameStateBase)[0]
+    director = gs.get_component_by_class(unreal.ArenaWaveDirectorComponent)
+    player = actors(server, unreal.LyraPlayerState)[0]
+    move(player.get_pawn(), 0, 300)
+    snapshot = director.get_editor_property("state")
+    unreal.MonsterArenaWaveTestLibrary.request_wave(player.get_component_by_class(unreal.RunProgressionComponent), snapshot.run_id, snapshot.wave_index)
+    yield from wait_for(lambda: bool(actors(server, unreal.ArenaMonster)), "New session spawns monsters after explicit wave start")
     check(all(ai.get_ai_state(m) in ("Idle", "Chase", "Melee") for m in actors(server, unreal.ArenaMonster)), "New-session monsters start their own StateTree instances")
 
 

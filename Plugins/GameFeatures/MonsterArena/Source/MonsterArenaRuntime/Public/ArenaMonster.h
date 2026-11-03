@@ -12,6 +12,8 @@ class ULyraHealthSet;
 class ULyraCombatSet;
 class UStateTree;
 class UStateTreeComponent;
+class AArenaDefenseCore;
+class UArenaWaveDirectorComponent;
 struct FGameplayEffectSpec;
 
 /** Monsters have no PlayerState and must not publish player-elimination messages. */
@@ -61,6 +63,14 @@ public:
 	bool IsValidAITarget(const APawn* Target) const;
 	bool IsTargetInMeleeRange() const;
 	void TryMeleeAttack();
+	void UpdateNavigation(float DeltaTime);
+	APawn* ResolveWaveTarget(APawn* Candidate);
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Monster|AI")
+	TObjectPtr<AArenaDefenseCore> DefenseTarget;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Monster|AI")
+	bool bHunter = true;
+	TWeakObjectPtr<UArenaWaveDirectorComponent> WaveDirector;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
 	TObjectPtr<ULyraHealthComponent> HealthComponent;
 
@@ -73,5 +83,12 @@ private:
 	TObjectPtr<ULyraCombatSet> CombatSet;
 	bool bDeathSettled = false;
 	double NextAttackTime = 0.0;
+	float PathRemaining = 0.0f;
+	float StuckTime = 0.0f;
+	FVector LastNavigationPosition = FVector::ZeroVector;
+	TArray<FVector> PathPoints;
+	int32 PathIndex = 0;
+	double TargetHoldUntil = 0;
+	double IgnorePlayersUntil = 0;
 	void HandleOutOfHealth(AActor* InstigatorActor, AActor* Causer, const FGameplayEffectSpec* Spec, float Magnitude, float OldValue, float NewValue);
 };

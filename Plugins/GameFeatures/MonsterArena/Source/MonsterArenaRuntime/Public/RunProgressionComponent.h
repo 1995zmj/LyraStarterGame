@@ -110,8 +110,10 @@ public:
 	void RequestCloseRewardChoices();
 	UFUNCTION(BlueprintCallable)
 	void RequestSelectReward(int32 RunId, int32 OfferId, FName CardId);
+	UFUNCTION(BlueprintCallable) void RequestWaveAction(int32 RunId, int32 WaveIndex);
 
 private:
+	UFUNCTION(Server, Reliable) void ServerWaveAction(int32 RunId, int32 WaveIndex);
 	UFUNCTION()
 	void OnRep_State();
 	UFUNCTION(Server, Reliable)

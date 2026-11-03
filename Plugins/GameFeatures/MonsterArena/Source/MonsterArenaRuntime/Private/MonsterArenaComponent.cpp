@@ -2,6 +2,7 @@
 #include "UI/MonsterArenaHUD.h"
 
 #include "ArenaMonster.h"
+#include "ArenaWaveDirectorComponent.h"
 #include "RunProgressionComponent.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
 #include "EngineUtils.h"
@@ -32,6 +33,18 @@ UMonsterArenaComponent::UMonsterArenaComponent(const FObjectInitializer& ObjectI
 	MonsterClass = AArenaMonster::StaticClass();
 }
 
+void UMonsterArenaComponent::BeginPlay()
+{
+	Super::BeginPlay();
+	if (GetOwner()->HasAuthority())
+	{
+		WaveDirector = NewObject<UArenaWaveDirectorComponent>(GetOwner(), TEXT("ArenaWaveDirector"));
+		WaveDirector->Definition = WaveDefinition.LoadSynchronous();
+		WaveDirector->MonsterClass = MonsterClass;
+		WaveDirector->RegisterComponent();
+	}
+}
+
 void UMonsterArenaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* TickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, TickFunction);
@@ -53,7 +66,6 @@ void UMonsterArenaComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			It.RemoveCurrent();
 		}
 	}
-	APawn* SpawnReference = nullptr;
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		APlayerController* PC = It->Get();
@@ -83,11 +95,6 @@ void UMonsterArenaComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		if (!Pawn || !PS || PS->GetLyraAbilitySystemComponent()->GetAvatarActor() != Pawn)
 		{
 			continue;
-		}
-		const ULyraHealthComponent* Health = ULyraHealthComponent::FindHealthComponent(Pawn);
-		if (Health && Health->GetHealth() > 0.0f && !Health->IsDeadOrDying())
-		{
-			SpawnReference = Pawn;
 		}
 		if (EquippedPawns.Contains(Pawn))
 		{
@@ -173,36 +180,7 @@ void UMonsterArenaComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		return;
 	}
 #endif
-	if (!GetOwner()->HasAuthority() || !SpawnReference)
-	{
-		return;
-	}
-	Monsters.RemoveAll([](const TWeakObjectPtr<AArenaMonster>& Monster) { return !Monster.IsValid(); });
-	SpawnCountdown -= DeltaTime;
-	if (SpawnCountdown > 0.0f || Monsters.Num() >= MaxAliveMonsters || !MonsterClass)
-	{
-		return;
-	}
-	SpawnCountdown = FMath::Max(0.1f, SpawnInterval);
-	TArray<AActor*> SpawnPoints;
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
-	{
-		if (It->ActorHasTag(TEXT("MonsterSpawn")))
-		{
-			SpawnPoints.Add(*It);
-		}
-	}
-	if (SpawnPoints.IsEmpty())
-	{
-		return;
-	}
-	const AActor* Point = SpawnPoints[FMath::RandHelper(SpawnPoints.Num())];
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
-	if (AArenaMonster* Monster = GetWorld()->SpawnActor<AArenaMonster>(MonsterClass, Point->GetActorTransform(), Params))
-	{
-		Monsters.Add(Monster);
-	}
+	// Wave director owns spawning, including while all players await respawn.
 }
 
 void UMonsterArenaComponent::EndPlay(const EEndPlayReason::Type Reason)
@@ -215,15 +193,9 @@ void UMonsterArenaComponent::EndPlay(const EEndPlayReason::Type Reason)
 		}
 	}
 	HUDs.Reset();
+	if (WaveDirector) { WaveDirector->DestroyComponent(); WaveDirector = nullptr; }
 	if (GetOwner()->HasAuthority())
 	{
-		for (const TWeakObjectPtr<AArenaMonster>& Monster : Monsters)
-		{
-			if (Monster.IsValid())
-			{
-				Monster->Destroy();
-			}
-		}
 		for (const auto& Pair : EquippedPawns)
 		{
 			if (Pair.Value.bOwnsItem && Pair.Value.QuickBar.IsValid() && Pair.Value.Item.IsValid())

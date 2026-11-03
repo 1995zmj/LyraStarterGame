@@ -3,6 +3,9 @@
 #include "UI/MonsterArenaRewardScreen.h"
 #include "UI/MonsterArenaRewardInputAction.h"
 #include "RunProgressionComponent.h"
+#include "ArenaWaveDirectorComponent.h"
+#include "GameFramework/GameStateBase.h"
+#include "InputAction.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
 #include "Character/LyraHealthComponent.h"
 #include "Character/LyraPawnData.h"
@@ -96,9 +99,13 @@ void UMonsterArenaHUD::NativeConstruct()
 		RewardMapping = NewObject<UInputMappingContext>(this);
 		RewardMapping->MapKey(OpenRewardAction, EKeys::U);
 		RewardMapping->MapKey(OpenRewardAction, EKeys::Gamepad_DPad_Up);
+		WaveAction = NewObject<UInputAction>(this);
+		RewardMapping->MapKey(WaveAction, EKeys::N);
+		RewardMapping->MapKey(WaveAction, EKeys::Gamepad_DPad_Right);
 		RewardInput = NewObject<UEnhancedInputComponent>(PC);
 		RewardInput->RegisterComponent();
 		RewardInput->BindAction(OpenRewardAction, ETriggerEvent::Started, this, &ThisClass::ToggleRewardMenu);
+		RewardInput->BindAction(WaveAction, ETriggerEvent::Started, this, &ThisClass::RequestWaveAction);
 		PC->PushInputComponent(RewardInput);
 		EnsureInputMapping();
 	}
@@ -177,6 +184,18 @@ void UMonsterArenaHUD::ToggleRewardMenu()
 {
 	if (IsRewardMenuOpen() || bRewardOpenRequested) { CloseRewardMenu(); }
 	else { OpenRewardMenu(); }
+}
+
+void UMonsterArenaHUD::RequestWaveAction()
+{
+	if (!BoundProgression || IsRewardMenuOpen()) { return; }
+	if (AGameStateBase* GS = GetWorld()->GetGameState())
+	{
+		if (auto* Director = GS->FindComponentByClass<UArenaWaveDirectorComponent>())
+		{
+			BoundProgression->RequestWaveAction(Director->State.RunId, Director->State.WaveIndex);
+		}
+	}
 }
 
 void UMonsterArenaHUD::OpenRewardMenu()

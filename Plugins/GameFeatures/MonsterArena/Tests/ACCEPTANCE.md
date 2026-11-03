@@ -1,6 +1,29 @@
 # MonsterArena 验收记录
 
-更新日期：2026-11-01，时区 Asia/Shanghai。以下按轮次保留历史结果。
+更新日期：2026-11-03，时区 Asia/Shanghai。以下按轮次保留历史结果。
+
+## 大本营血量 HUD（2026-11-03）
+
+- 调整现有 HUD Status：首行显示“大本营血量：当前 / 上限”；核心尚未同步时显示等待同步。MaxHealth 增加复制，避免客户端自定义上限显示错误。沿用已有控件和刷新路径，无资产迁移。
+- 用户关闭编辑器后，`Saved/Logs/MonsterArenaBaseHUD-BuildR2.log` 编辑器目标编译成功，退出码 0；首轮被 Live Coding 阻止的构建日志保留。
+- `Tests/Python/validate_base_health_hud.py` 运行两轮真实双人 PIE，从实际 Widget Blueprint 的 Status 读取文本，覆盖初始 1000/1000、权威上限变为 1500 后受伤至 1250、归零、重置满血、退出重进；服务端及客户端均通过，标记 `MONSTER_ARENA_BASE_HEALTH_HUD_PASSED`。使用测试桥接施加伤害，没有用真实怪物攻击或物理输入代替该操作。首次脚本因 HUD 尚未就绪时空文本索引失败，改为可等待空文本后 R2 通过，保留失败日志。
+- `Saved/Screenshots/WindowsEditor/ScreenShot00001.png` 为实际渲染 1288×760 窗口截图，确认左上角首行血量可见、无截断，原有等级／波次／奖励文本仍可见。未执行其他 DPI／分辨率、手柄、玩家死亡重生及打包；本次未改变输入交互。
+- `Saved/Logs/MonsterArenaBaseHUD-PIER2.log` 从启动到正常退出完整检查：1 Error（既有 PixelStreaming2RTC GEngine 无效），18 Warning（AbilitySystem 4、音频采样率 10、CrowdFollowing 3、MCP 许可 1）；无 Fatal／Ensure／断言／蓝图运行时异常／LogScript 警告／Python Traceback。项目整体无报错门槛未通过。`git diff --check` 通过。
+
+## 编译占用排查（2026-11-03）
+
+- 用户报告编译失败；原始 UBT 日志保留为 `Saved/Logs/MonsterArenaBuildLock-20261103.log`。复现日志 `MonsterArenaBuildVerify-20261103.log` 显示链接阶段 LNK1104，MonsterArenaEditor DLL 被 UnrealEditor 占用。
+- 通过 Win32_Process 确认 PID 51980 为此前启动 `validate_monster_statetree.py`、输出 `MonsterArenaWavesAIRegression.log` 的后台验收实例；按 PID 和完整测试参数匹配终止，返回值 0。未修改玩法代码或删除构建目录。
+- 再次执行 `Build.bat LyraEditor Win64 Development ... -WaitMutex`，`Saved/Logs/MonsterArenaBuildVerifyR2-20261103.log` 记录 DLL 链接与目标元数据生成成功、Result: Succeeded，退出码 0。本轮为增量编辑器目标构建验证，未重新执行玩法运行验收。
+
+## 统一 CSV 管理（2026-11-03）
+
+- `Data/ConfigRegistry.json` 管理成长奖励与守点波次两组、5 张 CSV；共用读取校验、依赖排序、全组预校验、快照导入、SHA256 和逐次 JSON 报告。编辑器 Tools 菜单提供清单、全量／单组操作和目录入口，旧导入入口兼容。新增管理逻辑仅在 Editor Python，未新增 Runtime 编辑器依赖。
+- `Saved/Logs/MonsterArenaCSVManagerR3.log`：17 项管理器检查通过，包含依赖循环、未注册 CSV、非法第二组阻止任何写入、校验期间源文件变化、模拟第二组写入失败的部分成功报告、两次真实全量导入及原有成长／波次非法输入回归。命令行正常退出，0 Error／0 Warning。
+- `Saved/Logs/MonsterArenaCSVMenuR2.log`：真实 PIE 中导入被拒绝，出现 `MONSTER_ARENA_CSV_PIE_GUARD_PASSED`；退出 PIE 后菜单重复注册无重复项。通过 computer-use 实际鼠标点击“校验全部”和“导入全部”，报告分别为 success=true，后者两组均 imported。菜单截图为 `Saved/Screenshots/MonsterArenaCSVMenu.png`；导入报告为 `Saved/ConfigImports/MonsterArena/20261103-003859-488437.json`。验收编辑器通过 Alt+F4 正常退出，日志含 LogExit 和关闭标记。
+- 完整交互日志为 1 Error／28 Warning：Error 为既有 PixelStreaming2RTC `GEngine is not valid`；Warning 涉及音频采样率、MCP 许可、CrowdFollowing 导航实例、HTTP 连通性及 EOS SSL 请求。无 Fatal／Ensure／断言／蓝图运行时异常／LogScript 警告／Python Traceback。项目整体无报错门槛仍未通过。
+- 保留失败日志：首次 `MonsterArenaCSVManager.log` 使用依赖 Level Editor 的 PIE 查询导致 commandlet 崩溃，已换为无窗口可用的 UnrealEditorSubsystem 查询并回归；首次 `MonsterArenaCSVMenu.log` 启动回调读取失效 `__file__`，已改为闭包捕获路径，R2 不再出现异常。
+- 本轮最终为 Python／配置／文档改动。构建尝试受其他编辑器占用 DLL 阻断，不能计为本轮编译通过。未执行打包、手柄菜单操作及完整默认五波真实输入通关；本轮配置验收不替代此前守点玩法未完成的交互验收。写入阶段不提供跨资产事务回滚，失败报告会保留已导入组状态。
 
 ## 怪物 AI 迁移到 StateTree（2026-11-01）
 

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "id": "progression",
+      "label": "成长与奖励",
+      "sources": ["Levels.csv", "RewardCards.csv", "RewardActions.csv"],
+      "outputs": ["/MonsterArena/Data/DA_MonsterArenaProgression", "/MonsterArena/Data/DA_MonsterArenaRewardPool", "/MonsterArena/Data/B_MonsterArenaProgression", "/MonsterArena/System/Experiences/B_MonsterArena"],
+      "depends_on": []
+    },
+    {
+      "id": "waves",
+      "label": "守点波次",
+      "sources": ["Waves.csv", "WaveSettings.csv"],
+      "outputs": ["/MonsterArena/Data/DA_ArenaWaves"],
+      "depends_on": []
+    }
+  ]
+}

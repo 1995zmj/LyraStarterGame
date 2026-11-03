@@ -47,6 +47,10 @@ Build/Scripts/*.csproj.props
 Content/Collections/
 
 # --- 操作系统杂项 ---
+# Python 编辑器工具的本地缓存
+__pycache__/
+*.py[cod]
+
 Thumbs.db
 Desktop.ini
 .DS_Store

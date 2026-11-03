@@ -7,6 +7,7 @@ import unreal
 import runpy
 from pathlib import Path
 
+runpy.run_path(str(Path(__file__).with_name("manage_csv.py")))["run"]("validate")
 unreal.load_module("MonsterArenaRuntime")
 unreal.load_module("MonsterArenaEditor")
 assert unreal.MonsterArenaContentLibrary.static_class().get_path_name() == "/Script/MonsterArenaEditor.MonsterArenaContentLibrary"
@@ -160,8 +161,10 @@ playlist.set_editor_property("max_player_count", 2)
 assets.save_loaded_asset(playlist)
 
 # Restore CSV-authored progression binding after experience configuration.
-runpy.run_path(str(Path(__file__).with_name("import_progression_csv.py")), run_name="__main__")
+
 runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_hud.py")), run_name="__main__")
 runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_reward_screen.py")), run_name="__main__")
 runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_ai.py")), run_name="__main__")
+runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_waves.py")), run_name="__main__")
+runpy.run_path(str(Path(__file__).with_name("manage_csv.py")), run_name="__main__")
 unreal.log("MONSTER_ARENA_SETUP_SUCCEEDED")

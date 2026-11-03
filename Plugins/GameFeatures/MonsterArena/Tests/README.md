@@ -1,5 +1,19 @@
 # MonsterArena 测试
 
+`Python/validate_base_health_hud.py` 通过编辑器 `-ExecutePythonScript` 入口运行，两轮双人实际 PIE 校验大本营血量在 HUD 首行的初始值、受伤、自定义上限复制、归零、重置与重进；成功标记 `MONSTER_ARENA_BASE_HEALTH_HUD_PASSED`，截图输出到 `Saved/Screenshots/WindowsEditor/`。
+
+## 统一 CSV 管理验收
+
+`Python/validate_csv_manager.py` 覆盖注册清单、分组与依赖、未注册文件、全组预校验、源文件变更、部分写入失败报告、重复真实导入和旧入口兼容。在项目根目录执行（`$UE` 为引擎目录）：
+
+```powershell
+& "$UE/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "$PWD/LyraStarterGame.uproject" -run=pythonscript -script="$PWD/Plugins/GameFeatures/MonsterArena/Tests/Python/validate_csv_manager.py" -unattended -NullRHI -nosound -SCCProvider=None -abslog="$PWD/Saved/Logs/MonsterArenaCSVManager.log"
+```
+
+成功标记为 `MONSTER_ARENA_CSV_MANAGER_SUCCEEDED: 17 checks`。重复执行使用新的日志文件名，保留失败记录。
+
+交互检查使用 `UnrealEditor.exe` 和 `-ExecutePythonScript=".../Tests/Python/preview_csv_manager.py"`：脚本验证 PIE 期间拒绝导入，停止 PIE 后保留编辑器，供真实点击 Tools → MonsterArena CSV 配置。脚本调用与真实菜单输入分别记录，报告位于 `Saved/ConfigImports/MonsterArena/`。
+
 测试内容归属 MonsterArena 插件，目录如下：
 
 | 位置 | 用途 |
@@ -110,3 +124,13 @@ Runtime C++ 测试及调用入口受 `WITH_DEV_AUTOMATION_TESTS` 保护。当前
 以上内容说明测试入口和预期覆盖，不表示这些检查已经执行或通过。实际结果以 [ACCEPTANCE.md](ACCEPTANCE.md) 中对应版本和运行记录为准。
 
 检查新一轮从启动到退出的完整日志，分别统计 Error/Fatal、断言／Ensure、蓝图异常和脚本警告。`-NullRHI` 中的 Niagara 特效空引用、独立 `-game` 中的实验性编辑器工具初始化问题不能被成功标记掩盖，也不能通过关闭日志消除。无界面测试和反射操作不能替代真实画面、输入及完整网络验收。
+
+## 守点波次验收
+
+`Python/validate_monster_waves.py` 使用有渲染双人 PIE。沿用上面的 `-ExecutePythonScript` 命令，将脚本替换为该路径，输出独立 `MonsterArenaWavesNetwork*.log`。测试临时把每波设为 3 进攻兵＋1 猎手、同时最多 2 只，以覆盖五波状态转换；不保存测试配置，不代表默认 152 只敌人的完整节奏／压力验收。
+
+覆盖客户端发起、距离及旧编号拒绝、重复启动、数量上限、销毁补位、五波清场、胜负复制、重置成长、受阻重试、双人死亡期间继续生成、真实 AI 攻击核心与离局重进。Editor 测试桥接位于 `Private/Tests/MonsterArenaWaveTestLibrary`；结果为 `Saved/Logs/MonsterArenaWavesResult.json`，重复运行前保留旧结果。成功标记 `MONSTER_ARENA_WAVES_SUCCEEDED`。
+
+`Python/preview_monster_waves.py` 启动单人预览，把玩家放到核心附近并摆好相机；不启动波次、不自动射击、不授予无敌。真实 N／手柄→ 启动，U 选卡。必须通过实际输入和画面另行验收。
+
+`Python/validate_wave_csv.py` 用 `-run=pythonscript -script=...` 运行，检查 CSV → DA 全字段、重复导入、默认组件绑定，以及 17 组非法输入不修改已有资产。成功标记为 `MONSTER_ARENA_WAVES_CSV_VALIDATION_SUCCEEDED`。

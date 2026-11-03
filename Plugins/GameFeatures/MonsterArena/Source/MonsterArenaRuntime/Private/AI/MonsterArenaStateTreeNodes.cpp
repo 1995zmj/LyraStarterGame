@@ -1,6 +1,7 @@
 #include "AI/MonsterArenaStateTreeNodes.h"
 
 #include "ArenaMonster.h"
+#include "ArenaDefenseCore.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -49,7 +50,7 @@ void FMonsterArenaFindTargetEvaluator::Tick(FStateTreeExecutionContext& Context,
 			}
 		}
 	}
-	Monster->AITarget = Target;
+	Monster->AITarget = Monster->ResolveWaveTarget(Target);
 }
 
 bool FMonsterArenaTargetCondition::TestCondition(FStateTreeExecutionContext& Context) const
@@ -75,10 +76,7 @@ EStateTreeRunStatus FMonsterArenaChaseTask::Tick(FStateTreeExecutionContext& Con
 	AArenaMonster* Monster = Cast<AArenaMonster>(Context.GetInstanceData(*this).Actor);
 	if (Monster && Monster->IsAliveForAI() && Monster->IsValidAITarget(Monster->AITarget.Get()))
 	{
-		const FVector Direction = (Monster->AITarget->GetActorLocation() - Monster->GetActorLocation()).GetSafeNormal2D();
-		Monster->SetActorRotation(Direction.Rotation());
-		// Movement execution only. The asset controls entering/leaving Chase.
-		Monster->AddMovementInput(Direction, 1.0f, true);
+		Monster->UpdateNavigation(DeltaTime);
 	}
 	return EStateTreeRunStatus::Running;
 }
