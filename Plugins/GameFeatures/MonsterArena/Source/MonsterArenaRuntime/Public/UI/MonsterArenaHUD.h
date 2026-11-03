@@ -7,6 +7,7 @@ class UTextBlock;
 class UProgressBar;
 class URunProgressionComponent;
 class ULyraAbilitySystemComponent;
+class UMonsterArenaCoreHealthWidget;
 class UMonsterArenaRewardScreen;
 class UInputMappingContext;
 class UInputAction;
@@ -40,6 +41,9 @@ protected:
 	TObjectPtr<UTextBlock> Reward;
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "MonsterArena|HUD", meta = (BindWidget))
 	TObjectPtr<UProgressBar> ExperienceBar;
+	/** Designer-placed child inside CoreHealthSlot; no runtime creation. */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "MonsterArena|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UMonsterArenaCoreHealthWidget> CoreHealthDisplay;
 	UPROPERTY(EditDefaultsOnly, Category = "MonsterArena|Rewards")
 	TSoftClassPtr<UMonsterArenaRewardScreen> RewardScreenClass = TSoftClassPtr<UMonsterArenaRewardScreen>(FSoftObjectPath(TEXT("/MonsterArena/UI/W_MonsterArenaRewardScreen.W_MonsterArenaRewardScreen_C")));
 	UPROPERTY(Transient)
@@ -58,6 +62,7 @@ protected:
 private:
 	UFUNCTION()
 	void RefreshProgression();
+	void RefreshCoreHealth();
 	void ToggleRewardMenu();
 	void RequestWaveAction();
 	void TryOpenRewardMenu();

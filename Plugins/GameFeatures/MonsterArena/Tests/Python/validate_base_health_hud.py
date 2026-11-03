@@ -1,4 +1,4 @@
-"""Rendered two-player PIE: authority health -> replicated core -> real HUD text."""
+"""Rendered two-player PIE: authority health -> replicated core -> mounted child widget."""
 import time
 import traceback
 import unreal
@@ -24,11 +24,25 @@ def director(world):
     return states[0].get_component_by_class(unreal.ArenaWaveDirectorComponent) if states else None
 
 
-def text(world):
+def hud_widget(world):
     pc = unreal.GameplayStatics.get_player_controller(world, 0)
     widgets = unreal.WidgetLibrary.get_all_widgets_of_class(world, unreal.MonsterArenaHUD, False)
-    hud = next((w for w in widgets if w.get_owning_player() == pc), None)
-    return str(hud.get_editor_property("status").get_text()) if hud else ""
+    return next((w for w in widgets if w.get_owning_player() == pc), None)
+
+
+def health_widget(world):
+    hud = hud_widget(world)
+    return hud.get_editor_property("core_health_display") if hud else None
+
+
+def text(world):
+    widget = health_widget(world)
+    return str(widget.get_editor_property("health_text").get_text()) if widget else ""
+
+
+def mounted(world):
+    # BindWidget found the designer-placed child; it is not created at runtime.
+    return health_widget(world) is not None
 
 
 def run():
@@ -39,19 +53,19 @@ def run():
         server = next(w for w in worlds if unreal.SystemLibrary.is_server(w))
         d = director(server)
         core = d.get_editor_property("core")
-        yield from wait(lambda: all(text(w).partition("\n")[0] == "大本营血量：1,000 / 1,000" for w in worlds), "Initial HUD and re-entry")
+        yield from wait(lambda: all(mounted(w) and text(w) == "大本营血量：1,000 / 1,000" for w in worlds), "Initial mounted widget and re-entry")
         # Nondefault max verifies replication rather than matching client defaults.
         core.set_editor_property("max_health", 1500.0)
         d.reset_run()
         unreal.MonsterArenaWaveTestLibrary.damage_core(d, 250)
-        yield from wait(lambda: all(text(w).partition("\n")[0] == "大本营血量：1,250 / 1,500" for w in worlds), "Damage and custom max replicated to both HUDs")
+        yield from wait(lambda: all(text(w) == "大本营血量：1,250 / 1,500" for w in worlds), "Damage and custom max replicated to both widgets")
         unreal.SystemLibrary.execute_console_command(server, "Shot SHOWUI")
         for _ in range(20):
             yield
         unreal.MonsterArenaWaveTestLibrary.damage_core(d, 10000)
-        yield from wait(lambda: all(text(w).partition("\n")[0] == "大本营血量：0 / 1,500" for w in worlds), "Destroyed core displays zero")
+        yield from wait(lambda: all(text(w) == "大本营血量：0 / 1,500" for w in worlds), "Destroyed core displays zero")
         d.reset_run()
-        yield from wait(lambda: all(text(w).partition("\n")[0] == "大本营血量：1,500 / 1,500" for w in worlds), "Reset restores HUD")
+        yield from wait(lambda: all(text(w) == "大本营血量：1,500 / 1,500" for w in worlds), "Reset restores widget")
         session.stop_session()
         yield from wait(lambda: not session.get_test_worlds(), "PIE teardown")
 

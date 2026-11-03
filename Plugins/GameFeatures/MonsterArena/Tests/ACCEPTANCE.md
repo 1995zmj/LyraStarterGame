@@ -1,8 +1,32 @@
 # MonsterArena 验收记录
 
-更新日期：2026-11-03，时区 Asia/Shanghai。以下按轮次保留历史结果。
+更新日期：2026-11-04，时区 Asia/Shanghai。以下按轮次保留历史结果。
+
+## 设计器 AddWidget 组合血量子控件（2026-11-04）
+
+- 参考 `W_PlayerTile` 与 `W_TopDownArenaHUDLayout` 的关系，血量子控件改为由 HUD 蓝图在设计器中持有：`W_MonsterArenaHUD` 的 `CoreHealthSlot`（NamedSlot）内通过 UMG Add Widget 放入 `CoreHealthDisplay`（`W_MonsterArenaCoreHealth`）。Runtime 不再使用 `CreateWidget`／`SetContent` 创建或挂载；`UMonsterArenaHUD` 仅以 `BindWidgetOptional` 绑定 `CoreHealthDisplay` 并传入权威血量快照。
+- 删除 `CoreHealthWidgetClass`、`CreateCoreHealthWidget` 及 `NativeConstruct`／`NativeDestruct` 中的子控件创建和移除代码；HUD 生成器在新建或迁移资产时补建 `CoreHealthSlot` 与其中的 `CoreHealthDisplay`，已有设计器内容保留。
+- `LyraEditor Win64 Development` 编译成功（`MonsterArenaCoreHealthDesigner-Build.log`，退出码 0）。`MonsterArenaCoreHealthDesignerSetup.log`、`MonsterArenaCoreHealthDesignerValidationR2.log` 均为 0 Error／0 Warning，退出码 0。
+- 旧结构迁移：用 git 恢复不含槽和子控件的 HUD 后重跑生成器，`MonsterArenaCoreHealthDesignerLegacy.log` 为 0 Error／0 Warning，退出码 0；生成器实际补建 `CoreHealthSlot` 和 `CoreHealthDisplay`，未出现 BindWidget 或控件 GUID 错误。
+- `MonsterArenaCoreHealthDesignerPIE.log`：两轮真实双人 PIE 通过，子控件为 HUD 设计器实例而非运行时创建，覆盖初始 1000/1000、上限 1500 后受伤至 1250、归零、重置满血和退出重进；服务端与客户端均通过，标记 `MONSTER_ARENA_BASE_HEALTH_HUD_PASSED`。
+- 截图 `Saved/Screenshots/WindowsEditor/ScreenShot00007.png`（1288×760，服务端窗口）显示左上角“大本营血量：1,250 / 1,500”、红色血条及原有等级／波次／奖励文本；既有音频采样率提示仍叠在画面上。未执行客户端窗口截图、其他分辨率／DPI、手柄实机、死亡复活和正式打包。
+- 完整日志 **1 Error／19 Warning**：Error 为既有 PixelStreaming2RTC `GEngine is not valid`；Warning 为音频采样率 10、出生蒙太奇 4、CrowdFollowing 3、HTTP 超时 1、MCP 许可 1。无 Fatal／Ensure／断言／蓝图运行时异常／LogScript 警告／Python Traceback。项目整体无报错门槛未通过。`git diff --check` 通过。
+
+## 独立大本营血量子控件与命名槽（2026-11-03）
+
+> 该轮由 C++ 在运行时创建子控件；后续已改为设计器 AddWidget 组合，历史结果保留。
+
+- 将“大本营血量”从 HUD `Status` 首行拆出，新增 `UMonsterArenaCoreHealthWidget`／`W_MonsterArenaCoreHealth`，由 `HealthText`、`HealthBar` 显示权威血量快照和比例。HUD 蓝图新增 `CoreHealthSlot`（NamedSlot），C++ 在 `NativeConstruct` 中按 `CoreHealthWidgetClass` 创建子控件并用 `SetContent` 挂载；`Status` 恢复为等级、波次和奖励提示。核心未同步时子控件显示“等待同步”并清零血条。
+- `LyraEditor Win64 Development` 编译成功（最终 `MonsterArenaCoreHealthHUD-BuildFinalR2.log`，退出码 0；同内容的上一轮构建为 `MonsterArenaCoreHealthHUD-BuildFinal.log`）。Runtime 未新增 Editor 依赖；创建／校验代码在 MonsterArenaEditor。
+- `setup_monster_arena_hud.py` 先调用 `setup_monster_arena_core_health.py`，再创建／迁移 HUD。最终生成 `MonsterArenaCoreHealthSetupFinal.log` 与 `MonsterArenaCoreHealthValidation.log` 均为 0 Error／0 Warning，退出码 0；重复执行、父类、控件绑定和槽检查通过。
+- 旧结构迁移：用 git 恢复未含 `CoreHealthSlot` 的旧 HUD 后重跑生成器，`MonsterArenaCoreHealthSetupLegacyR2.log` 为 0 Error／0 Warning，退出码 0；迁移路径会补建槽并注册控件 GUID。首轮迁移暴露 NameSlot 缺少变量 GUID 的 Ensure 与加载期 BindWidget 报错，已改为 `BindWidgetOptional` 加 GUID 注册；失败日志 `MonsterArenaCoreHealthSetup.log`、`MonsterArenaCoreHealthSetupLegacy.log` 保留。
+- 最终代码下 `MonsterArenaCoreHealthPIER3.log`：两轮真实双人 PIE（监听服务器＋客户端）通过，断言子控件已挂载到 `CoreHealthSlot`，覆盖初始 1000/1000、权威上限改为 1500 后受伤至 1250、归零、重置满血及退出重进；服务端和客户端均读取实际 Widget 文本，标记 `MONSTER_ARENA_BASE_HEALTH_HUD_PASSED`。`MonsterArenaCoreHealthPIER2.log` 为同脚本的前一轮通过记录。首轮 `MonsterArenaCoreHealthPIE.log` 因 Git Bash 改写 `/MonsterArena/...` 地图参数，实际启动两个 Standalone 世界而超时；禁用 MSYS 路径转换后通过，失败日志保留。
+- 最终截图 `Saved/Screenshots/WindowsEditor/ScreenShot00005.png`（1288×760，服务端窗口）显示左上角“大本营血量：1,250 / 1,500”、红色血条及原有等级／波次／奖励文本，无截断；画面叠有既有音频采样率提示，部分遮住血条，与本次改动无关。未执行其客户端窗口截图、其他分辨率／DPI、手柄实机、死亡复活和正式打包。
+- `MonsterArenaCoreHealthPIER3.log` 完整日志为 **1 Error／19 Warning**：Error 为既有 PixelStreaming2RTC `GEngine is not valid`；Warning 为音频采样率 10、出生蒙太奇 4、CrowdFollowing 3、HTTP 超时 1、MCP 许可 1。无 Fatal／Ensure／断言／蓝图运行时异常／LogScript 警告／Python Traceback。项目整体无报错门槛未通过。`git diff --check` 通过。
 
 ## 大本营血量 HUD（2026-11-03）
+
+> 该轮把血量拼在 `Status` 首行；后续已迁移为独立子控件，历史结果保留。
 
 - 调整现有 HUD Status：首行显示“大本营血量：当前 / 上限”；核心尚未同步时显示等待同步。MaxHealth 增加复制，避免客户端自定义上限显示错误。沿用已有控件和刷新路径，无资产迁移。
 - 用户关闭编辑器后，`Saved/Logs/MonsterArenaBaseHUD-BuildR2.log` 编辑器目标编译成功，退出码 0；首轮被 Live Coding 阻止的构建日志保留。

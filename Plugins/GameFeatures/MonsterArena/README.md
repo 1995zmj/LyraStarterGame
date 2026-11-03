@@ -2,13 +2,15 @@
 
 CSV 配置统一通过编辑器 **Tools → MonsterArena CSV 配置** 管理，支持全量／分组校验和导入。注册清单为 `Data/ConfigRegistry.json`，当前接管成长奖励与守点波次共 5 张表；新增配置组的接入方法见 [配置说明](Data/README.md)。
 
-守点 HUD 的 `Status` 首行显示“大本营血量：当前 / 上限”，核心引用尚未同步时显示“等待同步”。当前血量与上限均由服务端复制，受伤、摧毁和重置后使用权威值刷新；保留原有蓝图布局与控件绑定。
+守点大本营血量由独立子控件 `W_MonsterArenaCoreHealth` 显示，HUD 蓝图在设计器中通过命名槽 `CoreHealthSlot` 持有该子控件；关系与 `W_TopDownArenaHUDLayout` 持有其子控件一致，不使用运行时 `CreateWidget`。子控件显示“大本营血量：当前 / 上限”和血条；核心引用尚未同步时显示“等待同步”并将血条置零。当前血量与上限均由服务端复制，受伤、摧毁和重置后使用权威值刷新。HUD 的 `Status` 只保留等级、波次和提示信息，不再拼接血量文本。
 
 界面开发遵循仓库 [界面制作规范](../../../AGENTS.md#界面制作规范)，涵盖目录归属、C++／蓝图职责、子控件组合、数据事件、资源生成迁移与运行验收。以下为本玩法的具体绑定约定。
 
-HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `UMonsterArenaHUD`。在 Widget Blueprint Designer 调整布局、字体和颜色；保留 `Status`（TextBlock）、`ExperienceBar`（ProgressBar）、`Reward`（TextBlock）的名称和类型，供 C++ `BindWidget` 绑定。`Public/UI/MonsterArenaHUD.h` 声明 HUD，`Private/UI/MonsterArenaHUD.cpp` 更新成长显示，`Private/UI/MonsterArenaHUDInput.cpp` 管理选卡输入、弹窗与输入锁。刷怪组件通过 `HUDClass` 引用蓝图类，默认使用该界面。
+HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `UMonsterArenaHUD`。在 Widget Blueprint Designer 调整布局、字体和颜色；保留 `Status`（TextBlock）、`ExperienceBar`（ProgressBar）、`Reward`（TextBlock）、`CoreHealthSlot`（NamedSlot）及其内部 `CoreHealthDisplay`（`W_MonsterArenaCoreHealth`）实例。`CoreHealthDisplay` 由设计器 Add Widget 放入命名槽，C++ 只通过 `BindWidget` 绑定并更新数据，不创建或重新挂载子控件。`Public/UI/MonsterArenaHUD.h` 声明 HUD，`Private/UI/MonsterArenaHUD.cpp` 更新成长与血量快照，`Private/UI/MonsterArenaHUDInput.cpp` 管理选卡输入、弹窗与输入锁。
 
-资源生成入口为 `Content/Python/setup_monster_arena_hud.py`，只在资源不存在时创建布局，已有设计器调整不会被重置；创建和校验代码位于 MonsterArenaEditor 的 `Public/UI`、`Private/UI/MonsterArenaHUDLibrary`。完整资源初始化脚本也会调用该入口。UI 源码统一放在各模块的 `Public/UI` 和 `Private/UI`，UI 资源放在 `Content/UI`；测试继续放在模块 `Private/Tests` 与插件 `Tests`。
+子控件 `/MonsterArena/UI/W_MonsterArenaCoreHealth` 的父类为 `UMonsterArenaCoreHealthWidget`，保留 `HealthText`（TextBlock）和 `HealthBar`（ProgressBar）供 `BindWidget` 绑定；它只接收 HUD 传入的权威血量快照，不自行查找玩家或业务数据。`Public/UI/MonsterArenaCoreHealthWidget.h` 与 `Private/UI/MonsterArenaCoreHealthWidget.cpp` 负责格式化和血条比例。刷怪组件通过 `HUDClass` 引用 HUD 蓝图类，默认使用该界面。
+
+资源生成入口为 `Content/Python/setup_monster_arena_hud.py`，它会先调用 `setup_monster_arena_core_health.py` 创建血量子控件，再创建 HUD；两个脚本都只在资源不存在时创建布局，已有设计器调整不会被重置。对于已存在的 HUD，生成器只补建缺失的 `CoreHealthSlot` 和其中的 `CoreHealthDisplay` 实例，保留其余布局。创建和校验代码位于 MonsterArenaEditor 的 `Public/UI`、`Private/UI` 下的 `MonsterArenaHUDLibrary` 与 `MonsterArenaCoreHealthWidgetLibrary`。完整资源初始化脚本也会调用该入口。UI 源码统一放在各模块的 `Public/UI` 和 `Private/UI`，UI 资源放在 `Content/UI`；测试继续放在模块 `Private/Tests` 与插件 `Tests`。
 
 选卡界面使用三级组合：`W_MonsterArenaRewardScreen` → `W_MonsterArenaRewardCard` → `W_MonsterArenaRewardStat`。页面保留 `Card1..3` 三个独立卡牌实例，以及 `PendingText`、`FeedbackText`、`ConfirmButton`、`CloseButton`；单卡保留 `SelectButton`、`CardBorder`、`ChoiceNumber`、`CardTitle`、`CardDescription`、`CardStack`、`EffectsBox`；效果行保留 `EffectName`、`EffectValue`、`EffectPreview`。这些名字和类型供 native BindWidget 绑定，布局、字体和样式由各自蓝图设计器控制。
 

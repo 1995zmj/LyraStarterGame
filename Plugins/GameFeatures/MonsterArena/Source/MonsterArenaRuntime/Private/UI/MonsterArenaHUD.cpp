@@ -1,5 +1,6 @@
 #include "UI/MonsterArenaHUD.h"
 
+#include "UI/MonsterArenaCoreHealthWidget.h"
 #include "RunProgressionComponent.h"
 #include "ArenaWaveDirectorComponent.h"
 #include "ArenaDefenseCore.h"
@@ -11,8 +12,24 @@
 
 #define LOCTEXT_NAMESPACE "MonsterArenaHUD"
 
+void UMonsterArenaHUD::RefreshCoreHealth()
+{
+	if (!CoreHealthDisplay) { return; }
+	const UArenaWaveDirectorComponent* Director = nullptr;
+	if (const UWorld* World = GetWorld())
+	{
+		if (const AGameStateBase* GameState = World->GetGameState())
+		{
+			Director = GameState->FindComponentByClass<UArenaWaveDirectorComponent>();
+		}
+	}
+	const AArenaDefenseCore* Core = Director ? Director->Core.Get() : nullptr;
+	CoreHealthDisplay->SetCoreHealth(Core ? Core->Health : 0.0f, Core ? Core->MaxHealth : 0.0f, Core != nullptr);
+}
+
 void UMonsterArenaHUD::RefreshProgression()
 {
+	RefreshCoreHealth();
 	if (!BoundProgression || !Status || !Reward) { return; }
 	const FRunProgressionState& State = BoundProgression->State;
 	const int32 Required = BoundProgression->GetExperienceRequired();
@@ -39,13 +56,8 @@ void UMonsterArenaHUD::RefreshProgression()
 			case EArenaWavePhase::Defeat: Phase = LOCTEXT("WaveLose", "防守失败 · 复活后 N / 手柄→ 重置对局"); break;
 			}
 			if (Wave.bSpawnBlocked) { Phase = LOCTEXT("WaveBlocked", "出怪受阻：请离开入口；若持续受阻，请检查导航和出生空间"); }
-			const FText CoreHealth = Director->Core
-				? FText::Format(LOCTEXT("BaseHealth", "大本营血量：{0} / {1}"),
-					FText::AsNumber(FMath::CeilToInt(FMath::Max(0.0f, Director->Core->Health))),
-					FText::AsNumber(FMath::CeilToInt(FMath::Max(0.0f, Director->Core->MaxHealth))))
-				: LOCTEXT("BaseUnavailable", "大本营血量：等待同步");
-			Status->SetText(FText::Format(LOCTEXT("WaveStatusWithBaseHealth", "{0}\n{1}\n波次 {2}/{3}  |  存活 {4}  待生成 {5}\n{6}"),
-				CoreHealth, Status->GetText(),
+			Status->SetText(FText::Format(LOCTEXT("WaveStatus", "{0}\n波次 {1}/{2}  |  存活 {3}  待生成 {4}\n{5}"),
+				Status->GetText(),
 				FText::AsNumber(Wave.WaveIndex), FText::AsNumber(Wave.WaveCount), FText::AsNumber(Wave.AliveCount), FText::AsNumber(Wave.PendingCount), Phase));
 		}
 	}
