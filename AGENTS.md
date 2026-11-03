@@ -29,6 +29,28 @@ git diff --check
 ## C++ 与蓝图的职责划分
 优先使用 C++ 实现主要玩法逻辑、通用系统和可复用功能，减少蓝图中的复杂逻辑，便于版本比较、审查和维护。需要频繁修改、调试或迭代的内容使用蓝图，例如玩法参数、资源绑定、表现流程和快速原型。将稳定逻辑封装为 C++ 类、组件或函数，通过属性和接口提供蓝图调整入口，避免同一逻辑在两处重复实现。功能稳定后，可将蓝图中复杂且可复用的逻辑迁移到 C++。
 
+## 玩法组件的添加与生命周期
+
+Experience 级常驻组件应通过 `UGameFeatureAction_AddComponents` 注册到对应 Actor（如 `LyraGameState`、`LyraPlayerState`），并在 Experience 中显式声明 `bClientComponent`／`bServerComponent`。默认优先采用该方式：组件在资产中可见，可按 Experience 开关、替换和复用，客户端存在性也有明确声明。
+
+仅当组件必须依附某个宿主组件或需要运行时配置时，才在宿主 `BeginPlay` 中动态创建并注册。满足任一条件时采用动态创建：
+
+- 创建时需要注入来自宿主或运行时的配置；`FGameFeatureComponentEntry` 只能指定类，不能指定实例属性。
+- 生命周期必须与宿主 1:1，宿主销毁或停用 GameFeature 时应一并清理。
+- 每个宿主实例需要不同配置，或实例数量按玩家、队伍、数据动态生成。
+
+动态创建时必须遵守：
+
+- 仅在服务端 `HasAuthority()` 时创建；需要客户端可见时，在组件构造中启用复制（`SetIsReplicatedByDefault(true)`），并在多人 PIE 中验证客户端能通过 `FindComponentByClass` 获取。
+- 先设置配置属性，再调用 `RegisterComponent()`；注册会立即触发组件的 `BeginPlay`。
+- 在宿主 `EndPlay` 中销毁组件并解除委托、清理引用，避免换图或停用 GameFeature 后泄漏。
+- 不要依赖 GameState、关卡 Actor 与宿主之间的 `BeginPlay` 顺序；出生点、核心等世界对象应使用懒查找或允许重试，不能在首次查找失败后永久不可用。
+- 在宿主类和组件类注释中写明创建者、创建时机和销毁时机；不能只让组件在代码中隐式存在。
+
+新增组件前先确认归属和数量：同一 Experience 只需要一个实例且配置可放在类默认值中时，使用 AddComponents；需要按 Experience 调整默认值时，提供蓝图子类承载默认值，不要把运行时配置硬编码进 C++ 构造函数。重复激活、多 Experience 共用或 GameFeature 重新启用时不得产生重复组件。
+
+验收至少覆盖：组件在预期 Actor 上唯一存在、服务端权威、客户端可获取、GameFeature 停用或退出重进后正确清理。现有示例：`MonsterArenaComponent`、`RunProgressionComponent` 通过 AddComponents 注册；`ArenaWaveDirectorComponent` 由宿主在服务端动态创建，因为需要注入波次配置并与宿主同生命周期。
+
 ## 界面制作规范
 
 本节是仓库级通用规范，适用于所有现有和后续玩法、所有 GameFeature 及共享 UI。新建、修改或重构 HUD、菜单、页面、列表和子控件时，均须按以下流程执行。各玩法文档记录自己的交互、绑定和资源路径，并遵循本节；不能将本规范仅视为 MonsterArena 的实现约定。
