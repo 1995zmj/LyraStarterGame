@@ -9,9 +9,8 @@ class URunProgressionComponent;
 class ULyraAbilitySystemComponent;
 class UMonsterArenaCoreHealthWidget;
 class UMonsterArenaRewardScreen;
-class UInputMappingContext;
 class UInputAction;
-class UEnhancedInputComponent;
+class UInputMappingContext;
 class FMonsterArenaRewardInputTracker;
 
 /** Blueprint owns the HUD layout; C++ updates progression and manages reward interaction. */
@@ -50,23 +49,25 @@ protected:
 	TObjectPtr<UMonsterArenaRewardScreen> RewardScreen;
 	UPROPERTY(Transient)
 	TObjectPtr<URunProgressionComponent> BoundProgression;
-	UPROPERTY(Transient)
-	TObjectPtr<UInputMappingContext> RewardMapping;
+	/** Registered with the local player's user settings so both bindings appear in the settings screen. */
+	UPROPERTY(EditDefaultsOnly, Category = "MonsterArena|Input")
+	TSoftObjectPtr<UInputMappingContext> RewardMappingAsset = TSoftObjectPtr<UInputMappingContext>(FSoftObjectPath(TEXT("/MonsterArena/Input/Mappings/IMC_MonsterArena.IMC_MonsterArena")));
+	/** Reward action is used for the input hint and the reward screen's close-key query. */
+	UPROPERTY(EditDefaultsOnly, Category = "MonsterArena|Input")
+	TSoftObjectPtr<UInputAction> OpenRewardActionAsset = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/MonsterArena/Input/Actions/IA_MonsterArena_OpenRewards.IA_MonsterArena_OpenRewards")));
+	/** Wave action is only read to display the current shortcut; the ability handles the input. */
+	UPROPERTY(EditDefaultsOnly, Category = "MonsterArena|Input")
+	TSoftObjectPtr<UInputAction> WaveActionAsset = TSoftObjectPtr<UInputAction>(FSoftObjectPath(TEXT("/MonsterArena/Input/Actions/IA_MonsterArena_WaveAction.IA_MonsterArena_WaveAction")));
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> OpenRewardAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> WaveAction;
-	UPROPERTY(Transient)
-	TObjectPtr<UEnhancedInputComponent> RewardInput;
 	int32 LastLevel = 1;
 	float NotificationRemaining = 0.0f;
 private:
 	UFUNCTION()
 	void RefreshProgression();
 	void RefreshCoreHealth();
-	void ToggleRewardMenu();
-	void RequestWaveAction();
 	void TryOpenRewardMenu();
-	void EnsureInputMapping();
 	void ReleaseRewardInputBlock();
 	void HandleApplicationActivationChanged(bool bActive);
 	TWeakObjectPtr<ULyraAbilitySystemComponent> BlockedASC;

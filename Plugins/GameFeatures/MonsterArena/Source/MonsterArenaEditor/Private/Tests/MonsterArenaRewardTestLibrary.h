@@ -3,6 +3,7 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "MonsterArenaRewardTestLibrary.generated.h"
 
+class APlayerController;
 class UMonsterArenaHUD;
 class UMonsterArenaRewardScreen;
 class URunProgressionComponent;
@@ -53,6 +54,26 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
 	static int32 GetInputBlockCount(APawn* Pawn);
+
+	/** True when the local player registered IMC_MonsterArena and U is mapped to open rewards. */
+	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
+	static bool HasRewardInputMapping(APlayerController* Controller);
+
+	/** True when the owning player's ASC was granted the input-driven reward ability. */
+	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
+	static bool HasRewardAbility(APlayerController* Controller);
+
+	/** True when the local player maps N to IA_MonsterArena_WaveAction. */
+	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
+	static bool HasWaveInputMapping(APlayerController* Controller);
+
+	/** True when the owning player's ASC was granted the input-driven wave ability. */
+	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
+	static bool HasWaveAbility(APlayerController* Controller);
+
+	/** True when the mapping name is present in the local player's mappable key profile. */
+	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
+	static bool HasPlayerMappableSetting(APlayerController* Controller, FName MappingName);
 
 	UFUNCTION(BlueprintPure, Category = "MonsterArena|Tests")
 	static bool IsDamageImmune(APawn* Pawn);

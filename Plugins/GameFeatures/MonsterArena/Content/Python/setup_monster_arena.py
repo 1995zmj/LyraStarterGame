@@ -162,6 +162,7 @@ assets.save_loaded_asset(playlist)
 
 # Restore CSV-authored progression binding after experience configuration.
 
+runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_input.py")), run_name="__main__")
 runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_hud.py")), run_name="__main__")
 runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_reward_screen.py")), run_name="__main__")
 runpy.run_path(str(Path(__file__).with_name("setup_monster_arena_ai.py")), run_name="__main__")

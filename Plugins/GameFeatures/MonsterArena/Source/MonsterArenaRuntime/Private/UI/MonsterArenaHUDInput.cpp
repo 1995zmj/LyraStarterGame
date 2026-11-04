@@ -1,10 +1,7 @@
 #include "UI/MonsterArenaHUD.h"
 
 #include "UI/MonsterArenaRewardScreen.h"
-#include "UI/MonsterArenaRewardInputAction.h"
 #include "RunProgressionComponent.h"
-#include "ArenaWaveDirectorComponent.h"
-#include "GameFramework/GameStateBase.h"
 #include "InputAction.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
 #include "Character/LyraHealthComponent.h"
@@ -13,16 +10,16 @@
 #include "Components/TextBlock.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/GameViewportClient.h"
-#include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Framework/Application/SlateUser.h"
 #include "GameFramework/PlayerController.h"
-#include "InputMappingContext.h"
 #include "Input/LyraInputConfig.h"
+#include "InputMappingContext.h"
 #include "Player/LyraPlayerState.h"
 #include "PrimaryGameLayout.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 #include "Widgets/SViewport.h"
 #include "Widgets/SWindow.h"
 
@@ -95,32 +92,24 @@ void UMonsterArenaHUD::NativeConstruct()
 			FSlateApplication::Get().RegisterInputPreProcessor(InputTracker, 0);
 			FSlateApplication::Get().OnApplicationActivationStateChanged().AddUObject(this, &ThisClass::HandleApplicationActivationChanged);
 		}
-		OpenRewardAction = NewObject<UMonsterArenaRewardInputAction>(this);
-		RewardMapping = NewObject<UInputMappingContext>(this);
-		RewardMapping->MapKey(OpenRewardAction, EKeys::U);
-		RewardMapping->MapKey(OpenRewardAction, EKeys::Gamepad_DPad_Up);
-		WaveAction = NewObject<UInputAction>(this);
-		RewardMapping->MapKey(WaveAction, EKeys::N);
-		RewardMapping->MapKey(WaveAction, EKeys::Gamepad_DPad_Right);
-		RewardInput = NewObject<UEnhancedInputComponent>(PC);
-		RewardInput->RegisterComponent();
-		RewardInput->BindAction(OpenRewardAction, ETriggerEvent::Started, this, &ThisClass::ToggleRewardMenu);
-		RewardInput->BindAction(WaveAction, ETriggerEvent::Started, this, &ThisClass::RequestWaveAction);
-		PC->PushInputComponent(RewardInput);
-		EnsureInputMapping();
-	}
-}
-
-void UMonsterArenaHUD::EnsureInputMapping()
-{
-	const ULocalPlayer* LocalPlayer = GetOwningLocalPlayer();
-	UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
-	if (Subsystem && RewardMapping && !Subsystem->HasMappingContext(RewardMapping))
-	{
-		FModifyContextOptions Options;
-		Options.bNotifyUserSettings = true;
-		Options.bIgnoreAllPressedKeysUntilRelease = true;
-		Subsystem->AddMappingContext(RewardMapping, 100, Options);
+		OpenRewardAction = OpenRewardActionAsset.LoadSynchronous();
+		WaveAction = WaveActionAsset.LoadSynchronous();
+		if (!OpenRewardAction || !WaveAction)
+		{
+			UE_LOG(LogTemp, Error, TEXT("MonsterArena: input actions are missing; regenerate them with Content/Python/setup_monster_arena_input.py."));
+		}
+		// The experience action can run before the IMC asset is loaded; register it here
+		// once the local player and its key profile definitely exist.
+		if (UInputMappingContext* Mapping = RewardMappingAsset.LoadSynchronous())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Subsystem = PC->GetLocalPlayer() ? PC->GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr)
+			{
+				if (UEnhancedInputUserSettings* Settings = Subsystem->GetUserSettings())
+				{
+					Settings->RegisterInputMappingContext(Mapping);
+				}
+			}
+		}
 	}
 }
 
@@ -134,7 +123,6 @@ bool UMonsterArenaHUD::IsRewardToggleKey(const FKey& Key) const
 void UMonsterArenaHUD::NativeTick(const FGeometry& Geometry, float DeltaTime)
 {
 	Super::NativeTick(Geometry, DeltaTime);
-	EnsureInputMapping();
 	const APlayerController* PC = GetOwningPlayer();
 	if (PC && InputPawn.Get() != PC->GetPawn())
 	{
@@ -178,24 +166,6 @@ void UMonsterArenaHUD::NativeTick(const FGeometry& Geometry, float DeltaTime)
 	NotificationRemaining = FMath::Max(0.0f, NotificationRemaining - DeltaTime);
 	// Keep the input hint up to date after key rebinding without reopening the HUD.
 	RefreshProgression();
-}
-
-void UMonsterArenaHUD::ToggleRewardMenu()
-{
-	if (IsRewardMenuOpen() || bRewardOpenRequested) { CloseRewardMenu(); }
-	else { OpenRewardMenu(); }
-}
-
-void UMonsterArenaHUD::RequestWaveAction()
-{
-	if (!BoundProgression || IsRewardMenuOpen()) { return; }
-	if (AGameStateBase* GS = GetWorld()->GetGameState())
-	{
-		if (auto* Director = GS->FindComponentByClass<UArenaWaveDirectorComponent>())
-		{
-			BoundProgression->RequestWaveAction(Director->State.RunId, Director->State.WaveIndex);
-		}
-	}
 }
 
 void UMonsterArenaHUD::OpenRewardMenu()
@@ -342,23 +312,8 @@ void UMonsterArenaHUD::NativeDestruct()
 		FSlateApplication::Get().OnApplicationActivationStateChanged().RemoveAll(this);
 	}
 	InputTracker.Reset();
-	if (const ULocalPlayer* LocalPlayer = GetOwningLocalPlayer())
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-		{
-			FModifyContextOptions Options;
-			Options.bNotifyUserSettings = true;
-			Subsystem->RemoveMappingContext(RewardMapping, Options);
-		}
-	}
-	if (RewardInput)
-	{
-		if (APlayerController* PC = GetOwningPlayer()) { PC->PopInputComponent(RewardInput); }
-		RewardInput->DestroyComponent();
-		RewardInput = nullptr;
-	}
-	RewardMapping = nullptr;
 	OpenRewardAction = nullptr;
+	WaveAction = nullptr;
 	Super::NativeDestruct();
 }
 

@@ -4,6 +4,7 @@
 #include "MonsterArenaComponent.generated.h"
 
 class AArenaMonster;
+class APlayerController;
 class UArenaWaveDirectorComponent;
 class UArenaWaveDefinition;
 class UMonsterArenaHUD;
@@ -31,6 +32,9 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* TickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual void BeginPlay() override;
+	/** Returns the locally created HUD owned by this controller, if it already exists. */
+	UFUNCTION(BlueprintPure, Category = "Arena|UI")
+	UMonsterArenaHUD* FindHUDForPlayer(APlayerController* PlayerController) const;
 	/** Legacy administrative spawn gate: <= 0 pauses spawning; positive values do not override wave caps. */
 	UPROPERTY(EditAnywhere, Category = "Arena")
 	int32 MaxAliveMonsters = 6;

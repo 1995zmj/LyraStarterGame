@@ -45,6 +45,15 @@ void UMonsterArenaComponent::BeginPlay()
 	}
 }
 
+UMonsterArenaHUD* UMonsterArenaComponent::FindHUDForPlayer(APlayerController* PlayerController) const
+{
+	for (const TObjectPtr<UMonsterArenaHUD>& HUD : HUDs)
+	{
+		if (HUD && HUD->GetOwningPlayer() == PlayerController) { return HUD; }
+	}
+	return nullptr;
+}
+
 void UMonsterArenaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* TickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, TickFunction);

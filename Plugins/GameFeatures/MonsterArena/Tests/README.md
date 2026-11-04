@@ -29,6 +29,7 @@
 | `Python/validate_monster_arena_editor.py` | Editor 模块和 Python 配置接口校验 |
 | `Python/validate_monster_arena_hud.py` | 保存的 HUD Widget Blueprint 父类、必要控件绑定与编译校验；命令行用法与 Editor 配置校验相同 |
 | `Python/validate_reward_screen_blueprint.py` | 选卡页、独立卡牌、效果行的 Widget Blueprint 父类和必要控件绑定、编译及 HUD 默认类绑定检查 |
+| `Python/validate_monster_arena_input.py` | 输入动作父类、Value Type、两个玩家映射名、IMC 默认映射，以及 `InputData_MonsterArena` 的选卡／波次 InputTag、`AbilitySet_MonsterArena` 的两个技能授予、动作集输入项和 Experience 技能集绑定检查 |
 | `Python/validate_csv_configuration.py` | CSV 重复导入、每条行为资产值、配置引用、等级断档／负经验／重复 ID／未知行为／悬空卡牌引用／空行为／非法数值和合计越界校验；使用 Editor 配置校验的命令行入口替换脚本路径 |
 | `Python/validate_reward_multiplayer.py` | 两名玩家的监听服务器／客户端 PIE 选卡、复制和界面生命周期回归 |
 | `Python/reward_card_view_cases.py` | 双人入口调用：实际卡牌与效果行蓝图实例、候选快照、七条行为合并成六行、比例格式、重复配置与只显示不发奖检查 |
@@ -69,6 +70,14 @@ Runtime C++ 测试及调用入口受 `WITH_DEV_AUTOMATION_TESTS` 保护。当前
 
 成功输出 `MONSTER_ARENA_EDITOR_MODULE_VALIDATION_SUCCEEDED`。脚本使用临时对象，不修改已保存资源。资源生成工具 `Content/Python/setup_monster_arena.py` 继续放在工具目录。
 
+输入资产校验使用同一入口，替换脚本路径：
+
+```powershell
+& "$UE/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "$PWD/LyraStarterGame.uproject" -run=pythonscript -script="$PWD/Plugins/GameFeatures/MonsterArena/Tests/Python/validate_monster_arena_input.py" -unattended -NullRHI -nosound -SCCProvider=None -abslog="$PWD/Saved/Logs/MonsterArenaInputValidation.log"
+```
+
+成功输出 `MONSTER_ARENA_INPUT_VALIDATION_SUCCEEDED`。重新生成输入资产使用 `Content/Python/setup_monster_arena_input.py`，成功输出 `MONSTER_ARENA_INPUT_SETUP_SUCCEEDED`。
+
 ## 运行 StateTree AI 验收
 
 先执行 `Content/Python/setup_monster_arena_ai.py` 生成资产；使用上面的 Editor 配置校验命令替换脚本路径即可。该工具保存资源，运行前须保存工作并关闭使用该资产的其他编辑器进程，不能和 PIE 进程同时写同一资产。完成后运行：
@@ -97,7 +106,7 @@ Runtime C++ 测试及调用入口受 `WITH_DEV_AUTOMATION_TESTS` 保护。当前
 
 所有涉及 RPC 的操作经测试库恢复正常游戏调用规则后执行。不能从 Python 直接调用客户端的选卡／开关界面接口：Python 的编辑器脚本保护会把嵌套的 Server RPC 当作本地调用，形成错误的网络测试结果。测试库仅位于 Editor 模块，不参与游戏打包。
 
-检查包括：升级只累计次数、owner-only 奖励状态、手动打开真实 CommonUI、服务端候选去重、世界时间继续前进、选卡期间正常受伤、关闭重开保留候选、通过客户端 RPC 确认、重复／无效请求、另一玩家状态隔离、死亡自动关闭、复活后手动恢复选择、最后一次领取关闭界面、输入锁清理，以及新对局拒绝旧请求。为了稳定验证网络和菜单状态，脚本暂时停止刷怪，伤害由正常 GAS 路径显式施加；它不是持续刷怪压力测试。
+检查包括：升级只累计次数、owner-only 奖励状态、手动打开真实 CommonUI、本地玩家已注册 `IMC_MonsterArena` 且 `U` 映射到打开动作、已获得输入驱动的选卡技能、`N` 映射到波次动作、已获得输入驱动的波次技能、两个绑定均进入玩家可映射设置档案、服务端候选去重、世界时间继续前进、选卡期间正常受伤、关闭重开保留候选、通过客户端 RPC 确认、重复／无效请求、另一玩家状态隔离、死亡自动关闭、复活后手动恢复选择、最后一次领取关闭界面、输入锁清理，以及新对局拒绝旧请求。为了稳定验证网络和菜单状态，脚本暂时停止刷怪，伤害由正常 GAS 路径显式施加；它不是持续刷怪压力测试。
 
 脚本输出：
 

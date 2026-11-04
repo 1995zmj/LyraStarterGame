@@ -10,10 +10,17 @@
 #include "Editor.h"
 #include "Engine/World.h"
 #include "MonsterArenaComponent.h"
+#include "Abilities/MonsterArenaOpenRewardsAbility.h"
+#include "Abilities/MonsterArenaWaveActionAbility.h"
 #include "UI/MonsterArenaHUD.h"
 #include "UI/MonsterArenaRewardCard.h"
 #include "Components/Button.h"
 #include "Components/StateTreeComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
+#include "InputAction.h"
+#include "InputCoreTypes.h"
+#include "InputMappingContext.h"
 #include "UI/MonsterArenaRewardScreen.h"
 #include "PlayInEditorDataTypes.h"
 #include "RunProgressionComponent.h"
@@ -21,6 +28,7 @@
 #include "Templates/UnrealTemplate.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
 #include "Player/LyraPlayerState.h"
+#include "UserSettings/EnhancedInputUserSettings.h"
 
 bool UMonsterArenaRewardTestLibrary::StartSession(int32 PlayerCount)
 {
@@ -133,6 +141,80 @@ bool UMonsterArenaRewardTestLibrary::RequestCard(URunProgressionComponent* Progr
 	TGuardValue<bool> RestoreGameplayCallspace(GAllowActorScriptExecutionInEditor, false);
 	Progression->RequestSelectReward(RunId, OfferId, CardId);
 	return true;
+}
+
+bool UMonsterArenaRewardTestLibrary::HasRewardInputMapping(APlayerController* Controller)
+{
+	const ULocalPlayer* LocalPlayer = IsValid(Controller) ? Controller->GetLocalPlayer() : nullptr;
+	const UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+	const UInputMappingContext* Context = LoadObject<UInputMappingContext>(nullptr, TEXT("/MonsterArena/Input/Mappings/IMC_MonsterArena.IMC_MonsterArena"));
+	const UInputAction* Action = LoadObject<UInputAction>(nullptr, TEXT("/MonsterArena/Input/Actions/IA_MonsterArena_OpenRewards.IA_MonsterArena_OpenRewards"));
+	return Subsystem && Context && Action
+		&& Subsystem->HasMappingContext(Context)
+		&& Subsystem->QueryKeysMappedToAction(Action).Contains(EKeys::U);
+}
+
+bool UMonsterArenaRewardTestLibrary::HasRewardAbility(APlayerController* Controller)
+{
+	const ALyraPlayerState* Player = IsValid(Controller) ? Controller->GetPlayerState<ALyraPlayerState>() : nullptr;
+	const ULyraAbilitySystemComponent* ASC = Player ? Player->GetLyraAbilitySystemComponent() : nullptr;
+	if (!ASC) { return false; }
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.Ability && Spec.Ability->GetClass()->IsChildOf(UMonsterArenaOpenRewardsAbility::StaticClass())) { return true; }
+	}
+	return false;
+}
+
+bool UMonsterArenaRewardTestLibrary::HasWaveInputMapping(APlayerController* Controller)
+{
+	const ULocalPlayer* LocalPlayer = IsValid(Controller) ? Controller->GetLocalPlayer() : nullptr;
+	const UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+	const UInputAction* Action = LoadObject<UInputAction>(nullptr, TEXT("/MonsterArena/Input/Actions/IA_MonsterArena_WaveAction.IA_MonsterArena_WaveAction"));
+	return Subsystem && Action && Subsystem->QueryKeysMappedToAction(Action).Contains(EKeys::N);
+}
+
+bool UMonsterArenaRewardTestLibrary::HasWaveAbility(APlayerController* Controller)
+{
+	const ALyraPlayerState* Player = IsValid(Controller) ? Controller->GetPlayerState<ALyraPlayerState>() : nullptr;
+	const ULyraAbilitySystemComponent* ASC = Player ? Player->GetLyraAbilitySystemComponent() : nullptr;
+	if (!ASC) { return false; }
+	for (const FGameplayAbilitySpec& Spec : ASC->GetActivatableAbilities())
+	{
+		if (Spec.Ability && Spec.Ability->GetClass()->IsChildOf(UMonsterArenaWaveActionAbility::StaticClass())) { return true; }
+	}
+	return false;
+}
+
+bool UMonsterArenaRewardTestLibrary::HasPlayerMappableSetting(APlayerController* Controller, FName MappingName)
+{
+	const ULocalPlayer* LocalPlayer = IsValid(Controller) ? Controller->GetLocalPlayer() : nullptr;
+	const UEnhancedInputLocalPlayerSubsystem* Subsystem = LocalPlayer ? LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>() : nullptr;
+	const UEnhancedInputUserSettings* Settings = Subsystem ? Subsystem->GetUserSettings() : nullptr;
+	if (!Settings || MappingName.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MonsterArena mappable settings: no user settings for %s on %s"), *MappingName.ToString(), *GetNameSafe(Controller));
+		return false;
+	}
+	int32 ProfileCount = 0;
+	FString RowSample;
+	for (const TPair<FString, TObjectPtr<UEnhancedPlayerMappableKeyProfile>>& Pair : Settings->GetAllAvailableKeyProfiles())
+	{
+		++ProfileCount;
+		if (!Pair.Value) { continue; }
+		const TMap<FName, FKeyMappingRow>& Rows = Pair.Value->GetPlayerMappingRows();
+		if (Rows.Contains(MappingName)) { return true; }
+		if (RowSample.IsEmpty())
+		{
+			for (const TPair<FName, FKeyMappingRow>& Row : Rows)
+			{
+				if (RowSample.Len() > 400) { break; }
+				RowSample += Row.Key.ToString() + TEXT(",");
+			}
+		}
+	}
+	UE_LOG(LogTemp, Warning, TEXT("MonsterArena mappable settings: %s missing on %s; profiles=%d rows=%s"), *MappingName.ToString(), *GetNameSafe(Controller), ProfileCount, *RowSample);
+	return false;
 }
 
 int32 UMonsterArenaRewardTestLibrary::GetInputBlockCount(APawn* Pawn)

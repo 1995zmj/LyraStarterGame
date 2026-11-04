@@ -2,6 +2,58 @@
 
 更新日期：2026-11-04，时区 Asia/Shanghai。以下按轮次保留历史结果。
 
+## 键位设置与 HUD 动态提示（2026-11-04）
+
+- `IA_MonsterArena_WaveAction` 在现有普通 `UInputAction` 资产上补齐 Instanced `PlayerMappableKeySettings`（Name `MonsterArena.WaveAction`、DisplayName `开始/下一波`、Category `怪物竞技场`），不更换资产路径。`MonsterArenaInputLibrary::EnsurePlayerMappableSettings` 通过反射写入 protected 属性，并对选卡、波次动作幂等执行。
+- 尝试新建 `UMonsterArenaWaveInputAction` 子类并替换同路径资产时，无人值守模式下的 `AssetTools` 拒绝覆盖已存在资产；失败日志 `MonsterArenaMappableWaveSetup.log`、`MonsterArenaMappableWaveSetup2.log` 已保留。最终采用在现有资产上添加设置子对象，避免重写 IMC／InputConfig／HUD 引用。
+- HUD 重新加载波次动作（仅用于显示），`MakeKeyHint` 每帧查询 `QueryKeysMappedToAction`；波次阶段文案改为格式化文本，改键后无需重开 HUD。
+- 诊断发现双人 PIE 客户端用户设置只有 1 个 profile、0 个 mapping row：Experience 的 `AddInputContextMapping` 注册时 IMC 资产尚未加载。HUD `NativeConstruct` 现在对本地玩家显式调用 `UEnhancedInputUserSettings::RegisterInputMappingContext(IMC_MonsterArena)`，随后两个 mapping row 均可查询。
+- 新增 `HasPlayerMappableSetting` 测试桥接，遍历本地玩家所有用户设置 profile 的 `GetPlayerMappingRows()`；双人 PIE 新增 `MonsterArena.OpenRewards`、`MonsterArena.WaveAction` 两条设置档案断言。
+- `LyraEditor Win64 Development` 构建成功：`MonsterArenaMappableWaveBuild4.log`、`Build6.log` 均 0 Error／0 Warning；诊断版本 `Build5.log` 也通过。
+- `MonsterArenaMappableWaveSetup3.log` 输出 `MONSTER_ARENA_INPUT_SETUP_SUCCEEDED`，退出码 0；`MonsterArenaMappableWaveValidation.log` 输出 `MONSTER_ARENA_INPUT_VALIDATION_SUCCEEDED`，退出码 0。重复执行 `MonsterArenaMappableWaveSetupR2.log` 仍成功，设置子对象未重复、映射与技能授予计数仍为 1。
+- 有渲染双人 PIE `MonsterArenaRewardNetwork_MappableWave2.log` 退出码 0，`MONSTER_ARENA_REWARD_NETWORK_SUCCEEDED`，137 项 PASS；两条设置档案断言通过，`LogPython: Error`／`LogScript: Warning`／Fatal／Ensure／蓝图异常均为 0。
+- 无界面冒烟 `MonsterArenaSmoke_MappableWave.log` 退出码 0，`MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`；58 条既有 Python 工具集 Error、4 条 Script Warning，无 Fatal／Ensure／蓝图异常，也没有输入资产缺失错误。
+- 未执行：在设置页逐项点击改键、改键后跨会话保存／重载、手柄标签页导航。设置档案断言只覆盖设置页的数据来源，不替代真实鼠标键盘操作。`git diff --check` 通过。
+
+## 波次快捷键改为 InputTag→技能链路（2026-11-04）
+
+`N`／手柄右方向键不再由 HUD 绑定，改为与选卡相同的资产链路。
+
+- `InputData_MonsterArena` 新增 `IA_MonsterArena_WaveAction` → `InputTag.Ability.WaveAction`；`AbilitySet_MonsterArena` 新增 `UMonsterArenaWaveActionAbility`（`OnInputTriggered`、`LocalOnly`、`Ability.Type.Arena.WaveAction`）。
+- 波次技能在所属客户端读取 PlayerState 的 `URunProgressionComponent` 和 GameState 的 `UArenaWaveDirectorComponent`，在 `State.bRewardMenuOpen` 为 false 时调用原有的 `RequestWaveAction(RunId, WaveIndex)`；服务端 `ServerWaveAction` 的 RunId/WaveIndex 校验不变。奖励菜单打开期间 ASC 输入锁会阻止技能激活。
+- HUD 不再加载 `IA_MonsterArena_WaveAction`，也不再创建 `UEnhancedInputComponent`／`PushInputComponent`／绑定任何按键。`MonsterArenaHUDInput.cpp` 现在只负责选卡窗口生命周期、输入锁、提示与关闭键查询；N 的提示文案仍为固定文本。
+- `LyraEditor Win64 Development` 构建成功，退出码 0。`MonsterArenaWaveAbilityBuild.log` 出现 1 条 `TSoftObjectPtr` 赋值弃用警告，改为非 const 参数后 `MonsterArenaWaveAbilityBuild2.log` 为 0 Error／0 Warning。
+- `MonsterArenaWaveInputSetup.log` 输出 `MONSTER_ARENA_INPUT_SETUP_SUCCEEDED`，退出码 0；`MonsterArenaWaveInputValidation.log` 输出 `MONSTER_ARENA_INPUT_VALIDATION_SUCCEEDED`，退出码 0；计数校验确认 `InputData_MonsterArena` 的两条 InputTag 映射和 `AbilitySet_MonsterArena` 的两个技能授予均恰好一条。重复执行 `MonsterArenaWaveInputSetupR2.log` 仍成功，内置校验同样通过，未追加重复项。
+- 有渲染双人 PIE `MonsterArenaRewardNetwork_WaveInput.log` 退出码 0，`MONSTER_ARENA_REWARD_NETWORK_SUCCEEDED`，137 项 PASS；新增断言“Owning client maps N to the wave action”和“Owning client is granted the input-driven wave ability”通过；`LogPython: Error`／`LogScript: Warning`／Fatal／Ensure／蓝图异常均为 0。
+- 无界面冒烟 `MonsterArenaSmoke_WaveInput.log` 退出码 0，输出 `MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`；58 条 `LogPython: Error`、4 条 `LogScript: Warning` 与历史一致，无 Fatal／Ensure／断言／蓝图异常，也没有输入资产缺失错误。
+- 未执行：真实键盘 `N`／手柄右方向键的物理按键，按住/连按行为，改键后的设置界面与跨会话持久化，打包／专用服务器。运行时断言只证明 N 已映射、波次技能已授予，不替代真实输入验收。`git diff --check` 通过。
+
+## 选卡输入改为 InputTag→技能链路（2026-11-04）
+
+仿照 ShooterCore `IA_ShowScoreboard` 的执行流程，把选卡快捷键从“HUD 绑定 EnhancedInput 动作”改为“IMC → IA → InputConfig(InputTag) → AbilitySet → GameplayAbility → 界面”。
+
+- `LAS_MonsterArena_Components` 新增 `GameFeatureAction_AddInputContextMapping`（`IMC_MonsterArena`）和 `GameFeatureAction_AddInputBinding`（`InputData_MonsterArena`）；`InputData_MonsterArena` 将 `IA_MonsterArena_OpenRewards` 映射到新增原生标签 `InputTag.Ability.OpenRewards`。
+- `B_MonsterArena` 的 `Add Abilities` 条目新增 `/MonsterArena/System/AbilitySet_MonsterArena`，向 `ALyraPlayerState` 的 ASC 授予 `UMonsterArenaOpenRewardsAbility`（`OnInputTriggered`、`LocalOnly`、`Ability.Type.Menu.OpenRewards`），InputTag 与 InputData 一致。技能在所属客户端找到 `UMonsterArenaComponent` 上的本地 HUD 并调用 `OpenRewardMenu()`；CommonUI 模态、输入锁和服务端 `ServerSetRewardMenuOpen` 校验保持不变。关闭仍由选卡页处理 `U`／Esc／手柄返回键。
+- HUD 不再创建或添加 `IMC_MonsterArena`，也不再绑定打开按键；只保留 `IA_MonsterArena_WaveAction` 的 N／手柄右方向键，并加载 `IA_MonsterArena_OpenRewards` 供提示文字和选卡页关闭键判断。
+- `setup_monster_arena_input.py` 幂等创建／补齐动作、映射、`InputData_MonsterArena`、`AbilitySet_MonsterArena`、动作集输入项与 Experience 技能集绑定；`MonsterArenaInputLibrary` 负责创建和校验整条链路。
+- `LyraEditor Win64 Development` 构建成功，退出码 0。`MonsterArenaInputAbilityBuild.log` 出现 1 条 `AbilityTags` 弃用警告，改为 `SetAssetTags` 后 `MonsterArenaInputAbilityBuild2.log` 和计数校验版本的 `MonsterArenaInputAbilityBuild3.log` 均为 0 Error／0 Warning。
+- `MonsterArenaInputAbilitySetup.log` 输出 `MONSTER_ARENA_INPUT_SETUP_SUCCEEDED`，退出码 0；`MonsterArenaInputAbilityValidation.log` 输出 `MONSTER_ARENA_INPUT_VALIDATION_SUCCEEDED`，退出码 0。重复执行 `MonsterArenaInputAbilitySetupR2.log` 仍成功，`MonsterArenaInputAbilityValidation2.log` 使用“恰好一项”计数校验，确认 InputData、AbilitySet、动作集输入项和 Experience 技能集绑定均未重复追加。
+- 有渲染双人 PIE `MonsterArenaRewardNetwork_AbilityInput.log` 退出码 0，`MONSTER_ARENA_REWARD_NETWORK_SUCCEEDED`，137 项 PASS；新增断言确认客户端已注册 `IMC_MonsterArena` 且 `U` 映射到打开动作、客户端 ASC 已获得输入驱动的选卡技能；`LogPython: Error`／`LogScript: Warning`／Fatal／Ensure／蓝图异常均为 0。
+- 无界面冒烟 `MonsterArenaSmoke_AbilityInput.log` 退出码 0，输出 `MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`；完整日志 58 条 `LogPython: Error`、4 条 `LogScript: Warning`，与历史无界面运行一致；无 Fatal／Ensure／断言／蓝图异常，也没有 `input actions are missing`。
+- 未执行：真实键盘 `U`／`N`、手柄方向键的物理按键，按住 U 打开后松开再按关闭的真实输入路径，改键后的设置界面与跨会话持久化，打包／专用服务器。运行时断言只证明映射已注册、技能已授予，不替代真实输入验收。`git diff --check` 通过。
+
+## 选卡输入改为资产（2026-11-04）
+
+- `UMonsterArenaHUD` 不再在 `NativeConstruct` 中 `NewObject` 输入动作和 MappingContext。HUD 通过 `MonsterArena|Input` 下的软引用加载 `/MonsterArena/Input/Actions/IA_MonsterArena_OpenRewards`、`IA_MonsterArena_WaveAction` 与 `/MonsterArena/Input/Mappings/IMC_MonsterArena`，资源缺失时输出 Error 并跳过绑定。C++ 仍保留 `ToggleRewardMenu`、输入锁、界面生命周期和服务端 `ServerSetRewardMenuOpen` 校验。
+- `IA_MonsterArena_OpenRewards` 使用 `UMonsterArenaRewardInputAction`，映射名保持 `MonsterArena.OpenRewards`；`IMC_MonsterArena` 保存 `U`／`Gamepad_DPad_Up` 打开奖励、`N`／`Gamepad_DPad_Right` 波次操作。新增 Editor 模块 `UMonsterArenaInputLibrary` 负责幂等创建和校验，入口为 `Content/Python/setup_monster_arena_input.py`；完整 setup 会调用该入口。Runtime 未新增 Editor 依赖。
+- `LyraEditor Win64 Development` 构建成功，退出码 0（`Saved/Logs/MonsterArenaInputBuild.log`、`MonsterArenaInputBuild2.log`）。
+- `MonsterArenaInputSetup.log` 实际创建 3 个资产并输出 `MONSTER_ARENA_INPUT_SETUP_SUCCEEDED`，退出码 0。再次执行 `MonsterArenaInputSetupR2.log` 仍成功，脚本内置校验要求每个动作／按键组合恰好一条映射，确认重复执行不会追加重复映射。
+- `MonsterArenaInputValidation.log` 输出 `MONSTER_ARENA_INPUT_VALIDATION_SUCCEEDED`，退出码 0；`MonsterArenaHUDValidation_InputAssets.log` 输出 `MONSTER_ARENA_HUD_VALIDATION_SUCCEEDED`，退出码 0。
+- 无界面冒烟 `MonsterArenaSmoke_InputAssets2.log` 退出码 0，输出 `MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`。完整日志 58 条 `LogPython: Error`、4 条 `LogScript: Warning`，与历史 `MonsterArenaSmoke_UnifiedKillReward3.log` 完全一致，均为引擎工具集初始化等既有问题；无 Fatal／Ensure／断言／Blueprint Runtime Error，也没有 `reward input assets are missing`。
+- 有渲染双人 PIE `MonsterArenaRewardNetwork_InputAssets2.log` 退出码 0，输出 `MONSTER_ARENA_REWARD_NETWORK_SUCCEEDED`，共 134 项 PASS；新增断言“Owning client registers IMC_MonsterArena and maps U to open rewards”通过，确认客户端 HUD 构造时实际注册了 MappingContext 且 `U` 已映射到打开动作。日志中 `LogPython: Error`、`LogScript: Warning`、Fatal、Ensure、蓝图异常、`Accessed None` 均为 0。首轮同脚本 `MonsterArenaRewardNetwork_InputAssets.log` 也通过 133 项检查并退出码 0。
+- 首次冒烟入口 `MonsterArenaSmoke_InputAssets.log` 因 Git Bash 把 `/MonsterArena/...` 改写为 Windows 路径而未进入地图，保留为失败记录；重跑使用 `MSYS_NO_PATHCONV=1`。
+- 未执行：真实键盘 `U`／`N`、手柄方向键的物理按键操作，改键后的设置界面与跨会话持久化，打包／专用服务器。运行时断言只证明映射已注册和按键已绑定，不替代真实输入验收。`git diff --check` 通过。
+
 ## 怪物配置收拢为单一结构体（2026-11-04）
 
 - `AArenaMonster` 不再暴露九个分散的复制属性，改为唯一成员 `FArenaMonsterConfig MonsterConfig`（`ReplicatedUsing = OnRep_MonsterConfig`，`DOREPLIFETIME` 整体复制）。`ApplyConfig` 在 FinishSpawning 前写入结构体并立即应用；客户端收到配置后由 `OnRep_MonsterConfig` 同步移速和仅表现用的体型缩放。生命初始化、StateTree 感知／近战／攻击间隔、近战伤害与击杀经验全部从 `MonsterConfig` 读取。
