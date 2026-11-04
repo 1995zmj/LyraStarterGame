@@ -69,7 +69,9 @@ void URunProgressionComponent::BeginPlay()
 	Super::BeginPlay();
 	if (GetOwner()->HasAuthority())
 	{
-		EliminationListener = UGameplayMessageSubsystem::Get(this).RegisterListener(FGameplayTag::RequestGameplayTag(TEXT("Lyra.Elimination.Message")), this, &ThisClass::OnEliminationMessage);
+		UGameplayMessageSubsystem& Messages = UGameplayMessageSubsystem::Get(this);
+		EliminationListener = Messages.RegisterListener(FGameplayTag::RequestGameplayTag(TEXT("Lyra.Elimination.Message")), this, &ThisClass::OnKillMessage);
+		MonsterKillListener = Messages.RegisterListener(TAG_MonsterArena_Elimination_Message, this, &ThisClass::OnKillMessage);
 	}
 	if (!Definition)
 	{
@@ -116,25 +118,35 @@ float URunProgressionComponent::GetDamagePerKill() const
 	return float(FMath::Min(Total, 16777216.0));
 }
 
-void URunProgressionComponent::RecordMonsterKill(AArenaMonster* Victim, int32 ExperienceReward)
+void URunProgressionComponent::OnKillMessage(FGameplayTag Channel, const FLyraVerbMessage& Message)
 {
-	CreditKill(Victim, ExperienceReward);
-}
+	if (!GetOwner() || !GetOwner()->HasAuthority() || ULyraVerbMessageHelpers::GetPlayerStateFromObject(Message.Instigator) != GetOwner())
+	{
+		return;
+	}
 
-void URunProgressionComponent::OnEliminationMessage(FGameplayTag Channel, const FLyraVerbMessage& Message)
-{
-	if (!GetOwner()->HasAuthority() || ULyraVerbMessageHelpers::GetPlayerStateFromObject(Message.Instigator) != GetOwner())
+	AActor* Victim = nullptr;
+	int32 ExperienceReward = 0;
+	if (AArenaMonster* Monster = Cast<AArenaMonster>(Message.Target))
 	{
-		return;
+		Victim = Monster;
+		ExperienceReward = Monster->MonsterConfig.ExperienceReward;
 	}
-	ALyraPlayerState* Victim = Cast<ALyraPlayerState>(Message.Target);
-	const ULyraTeamSubsystem* Teams = GetWorld()->GetSubsystem<ULyraTeamSubsystem>();
-	if (!Victim || Victim == GetOwner() || !Teams || Teams->CompareTeams(GetOwner(), Victim) != ELyraTeamComparison::DifferentTeams)
+	else if (ALyraPlayerState* PlayerVictim = Cast<ALyraPlayerState>(Message.Target))
 	{
-		return;
+		const ULyraTeamSubsystem* Teams = GetWorld()->GetSubsystem<ULyraTeamSubsystem>();
+		if (PlayerVictim == GetOwner() || !Teams || Teams->CompareTeams(GetOwner(), PlayerVictim) != ELyraTeamComparison::DifferentTeams)
+		{
+			return;
+		}
+		Victim = PlayerVictim->GetPawn();
 	}
-	// Deduplicate by dying pawn so a later respawn can award another kill.
-	CreditKill(Victim->GetPawn(), 0);
+
+	if (Victim)
+	{
+		// Deduplicate by dying pawn so a later respawn can award another kill.
+		CreditKill(Victim, ExperienceReward);
+	}
 }
 
 void URunProgressionComponent::CreditKill(AActor* Victim, int32 ExperienceReward)
@@ -591,6 +603,7 @@ void URunProgressionComponent::EndPlay(const EEndPlayReason::Type Reason)
 		RemoveRewards();
 	}
 	EliminationListener.Unregister();
+	MonsterKillListener.Unregister();
 	Super::EndPlay(Reason);
 }
 

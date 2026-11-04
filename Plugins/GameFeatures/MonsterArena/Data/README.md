@@ -2,7 +2,7 @@
 
 ## 统一管理入口
 
-配置统一登记在 `ConfigRegistry.json`。当前包含“成长与奖励”（Levels、RewardCards、RewardActions）和“守点波次”（Waves、WaveSettings），CSV 仍保存在本目录。
+配置统一登记在 `ConfigRegistry.json`。当前包含“成长与奖励”（Levels、RewardCards、RewardActions）和“守点波次”（Waves、WaveMonsters、Monsters、WaveSettings），CSV 仍保存在本目录。
 
 编辑器 **Tools → MonsterArena CSV 配置** 提供：列出配置清单、校验全部、导入全部、按组校验／导入、打开 CSV 目录、打开导入报告目录。若当前会话没有该菜单，在 Tools → Execute Python Script 执行 `Content/Python/manage_csv.py`；此脚本会注册菜单并执行一次全量导入。插件 Python 启动脚本在可用的交互编辑器中也尝试注册菜单。
 
@@ -85,20 +85,35 @@ Value 必须为有限正数；无效果时删除该行，不填写 0。相同行
 
 ## 守点波次 CSV
 
-修改 `Waves.csv` 配置每一波，修改 `WaveSettings.csv` 配置全局节奏。保存为 CSV UTF-8，保留列名与列顺序。全部源数据校验通过后才更新 `/MonsterArena/Data/DA_ArenaWaves`；不要把 DA 作为另一份数值来源。
+波次配置拆为四张表：`Waves.csv` 定义每波节奏，`WaveMonsters.csv` 为每波选择怪物类型与数量，`Monsters.csv` 保存怪物类型数值，`WaveSettings.csv` 保存全局节奏。保存为 CSV UTF-8，保留列名与列顺序。全部源数据校验通过后才更新 `/MonsterArena/Data/DA_ArenaWaves`；不要把 DA 作为另一份数值来源。
 
 | Waves.csv 列 | 含义与约束 |
 | --- | --- |
 | Wave | 从 1 连续递增，不重复、不跳号；新增波次可直接增加一行，最多 1000 波 |
-| AssaultCount | 进攻兵数量，非负整数 |
-| HunterCount | 猎手数量，非负整数；两类总数为 1～10000 |
 | AliveLimit | 同时存活上限，1～200 |
 | BatchSize | 每批数量，正整数且不能大于 AliveLimit |
 | BatchInterval | 本批最后一只生成后到下批的间隔，秒，0.3～3600 |
 | EntranceCount | 当前四入口地图使用的入口数量，1～4 |
 
-`WaveSettings.csv` 仅一行：`WarningDuration` 为开波预警秒数（0～120）；`WithinBatchInterval` 为批内生成间隔秒数（0.1～60）；`PlayerSafeDistance` 为生成位置距玩家的最小距离，UE 单位 cm（0～10000）。这些范围是数据保护限制，不代表推荐难度或性能承诺。
+| Monsters.csv 列 | 含义与约束 |
+| --- | --- |
+| MonsterId | 稳定英文／数字／下划线标识，字母开头，忽略大小写不得重复 |
+| InitialHealth / MeleeDamage | 初始生命 1～100000；每次近战伤害 0～100000 |
+| MoveSpeed | 移动速度，1～2000 |
+| ExperienceReward | 击杀经验，1～100000 |
+| DetectionRadius / MeleeRange | 侦测半径与近战距离，1～100000 |
+| AttackInterval | 攻击间隔秒数，0.1～100 |
+| BodyScale | 仅表现模型缩放，0.1～10；不改变碰撞胶囊和玩法判定 |
+
+| WaveMonsters.csv 列 | 含义与约束 |
+| --- | --- |
+| Wave | 必须存在于 `Waves.csv` |
+| MonsterId | 必须存在于 `Monsters.csv`，同一波内不可重复 |
+| Count | 该类型数量，1～10000；每波合计 1～10000 |
+| Role | `Assault` 向核心推进，`Hunter` 优先追玩家 |
+
+每波至少一行，缺失怪物行的波次拒绝导入。不同类型的生成顺序按配额穿插，不要求 CSV 行顺序等于实际生成顺序。`WaveSettings.csv` 仅一行：`WarningDuration` 为开波预警秒数（0～120）；`WithinBatchInterval` 为批内生成间隔秒数（0.1～60）；`PlayerSafeDistance` 为生成位置距玩家的最小距离，UE 单位 cm（0～10000）。这些范围是数据保护限制，不代表推荐难度或性能承诺。
 
 保存并退出 PIE，在编辑器 Tools → Execute Python Script 执行 `Plugins/GameFeatures/MonsterArena/Content/Python/import_waves_csv.py`。看到 `MONSTER_ARENA_WAVES_CSV_IMPORT_SUCCEEDED` 后重新进入 PIE。也可使用前面的命令行导入方式，将 script 路径替换为此文件。修改 CSV 本身不会立即改变运行中的对局。
 
-负数、空值、非整数计数、NaN／Inf、错误列名、断档波次、零怪物和批量超过上限等均拒绝，错误包含文件、行号或字段；非法输入不会修改已有资产。配置与生成的 DA 应一同版本管理。检查入口：`Tests/Python/validate_wave_csv.py`。
+负数、空值、非整数计数、NaN／Inf、错误列名、断档波次、零怪物、未知或重复的 `MonsterId`、非法角色、重复的波次／类型组合及批量超过上限等均拒绝，错误包含文件、行号或字段；非法输入不会修改已有资产。配置与生成的 DA 应一同版本管理。检查入口：`Tests/Python/validate_wave_csv.py`。

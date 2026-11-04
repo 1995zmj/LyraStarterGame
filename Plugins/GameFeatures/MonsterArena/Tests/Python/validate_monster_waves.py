@@ -87,6 +87,7 @@ def run():
     for ps in actors(server, unreal.LyraPlayerState):
         move(ps.get_pawn(), -800, -700)
     wave_tools.use_short_waves(d)
+    check(len(d.get_editor_property("definition").get_editor_property("monsters")) == 3, "Short waves keep the three-type monster catalog")
     yield from wait_for(lambda: state(cd).run_id == state(d).run_id, "Reset replicated")
     wave_tools.request_wave(progress, state(d).run_id, state(d).wave_index)
     yield from delay(server, 0.5)
@@ -101,6 +102,14 @@ def run():
     wave_tools.request_wave(progress, run_id, 0)
     yield from wait_for(lambda: state(d).alive_count == 2, "First batch reaches alive cap")
     check(state(d).wave_index == 1, "Duplicate start cannot skip waves")
+    yield from wait_for(lambda: len(actors(client, unreal.ArenaMonster)) == 2, "Monsters replicate to client")
+    for m in actors(client, unreal.ArenaMonster):
+        config = m.get_editor_property("monster_config")
+        values = (str(config.get_editor_property("monster_id")),
+                  config.get_editor_property("initial_health"),
+                  config.get_editor_property("move_speed"))
+        check(values in {("Grunt", 60.0, 220.0), ("Runner", 40.0, 320.0)},
+              "Client receives the whole MonsterConfig struct")
     for m in actors(server, unreal.ArenaMonster):
         m.get_movement_component().disable_movement()
     yield from delay(server, 1.2)
@@ -110,17 +119,25 @@ def run():
     removed.destroy_actor()
     check(state(d).alive_count == 1 and state(d).pending_count == 3, "Abnormal destruction requeues exactly one enemy")
     yield from wait_for(lambda: state(d).alive_count == 2, "Requeued enemy respawns")
+    seen = {}
     for wave in range(1, 6):
         deadline = time.monotonic() + 40
         while state(d).phase not in (Phase.INTERMISSION, Phase.VICTORY):
             assert state(d).alive_count <= 2, "Wave alive limit exceeded"
             for m in actors(server, unreal.ArenaMonster):
                 if unreal.LyraHealthComponent.find_health_component(m).get_health() > 0:
+                    config = m.get_editor_property("monster_config")
+                    monster_id = str(config.get_editor_property("monster_id"))
+                    if monster_id not in seen:
+                        seen[monster_id] = (health(m), config.get_editor_property("body_scale"), config.get_editor_property("move_speed"))
                     session.deal_attributed_damage(sp.get_pawn(), m, 10000)
             if time.monotonic() > deadline:
                 raise TimeoutError("Wave clear " + str(wave))
             yield
         check(state(d).wave_index == wave and state(d).pending_count == 0 and state(d).alive_count == 0, "Wave %d cleared exactly" % wave)
+        if wave == 1:
+            check(set(seen) == {"Grunt", "Runner"}, "First wave mixes configured monster types")
+            check(seen.get("Grunt") == (60.0, 1.0, 220.0) and seen.get("Runner") == (40.0, 0.75, 320.0), "Monster config applies health, visual scale and move speed")
         if wave < 5:
             yield from delay(server, 0.5)
             check(state(d).phase == Phase.INTERMISSION, "Intermission requires explicit input")

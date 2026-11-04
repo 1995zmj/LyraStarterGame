@@ -56,6 +56,14 @@ bool UArenaWaveDirectorComponent::RequestNextWave(APawn* Requester, int32 Expect
 	if (!CurrentWave.IsValid() || !FMath::IsFinite(Definition->WarningDuration) || Definition->WarningDuration < 0
 		|| !FMath::IsFinite(Definition->WithinBatchInterval) || Definition->WithinBatchInterval < 0.1f
 		|| !FMath::IsFinite(Definition->PlayerSafeDistance) || Definition->PlayerSafeDistance < 0) { return false; }
+	for (const FArenaWaveMonsterEntry& Entry : CurrentWave.Monsters)
+	{
+		if (!Definition->FindMonster(Entry.MonsterId))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("MonsterArena: wave %d references unknown or invalid monster '%s'"), State.WaveIndex, *Entry.MonsterId.ToString());
+			return false;
+		}
+	}
 	Entrances.RemoveAll([](auto Entrance) { return !Entrance.IsValid(); });
 	if (Entrances.Num() < CurrentWave.EntranceCount)
 	{
@@ -74,13 +82,30 @@ bool UArenaWaveDirectorComponent::RequestNextWave(APawn* Requester, int32 Expect
 		if (!State.EntranceNames.IsEmpty()) { State.EntranceNames += TEXT(" / "); }
 		State.EntranceNames += Direction;
 	}
-	// Bresenham-style distribution keeps hunters interleaved, including short final batches.
-	Queue.Reset();
-	const int32 Total = CurrentWave.AssaultCount + CurrentWave.HunterCount;
-	for (int32 Index = Total - 1; Index >= 0; --Index)
+	// Deficit round-robin interleaves every selected monster type while keeping exact per-type quotas.
+	TArray<FArenaSpawnRequest> Ordered;
+	TArray<int32> Spawned;
+	Spawned.Init(0, CurrentWave.Monsters.Num());
+	const int32 Total = CurrentWave.GetMonsterCount();
+	Ordered.Reserve(Total);
+	for (int32 Step = 0; Step < Total; ++Step)
 	{
-		Queue.Add(((Index + 1) * CurrentWave.HunterCount / Total) > (Index * CurrentWave.HunterCount / Total));
+		int32 BestIndex = INDEX_NONE;
+		double BestScore = -DBL_MAX;
+		for (int32 Index = 0; Index < CurrentWave.Monsters.Num(); ++Index)
+		{
+			const FArenaWaveMonsterEntry& Entry = CurrentWave.Monsters[Index];
+			if (Spawned[Index] >= Entry.Count) { continue; }
+			const double Score = double(Step + 1) * Entry.Count / Total - Spawned[Index];
+			if (Score > BestScore) { BestScore = Score; BestIndex = Index; }
+		}
+		if (BestIndex == INDEX_NONE) { break; }
+		++Spawned[BestIndex];
+		Ordered.Add({CurrentWave.Monsters[BestIndex].MonsterId, CurrentWave.Monsters[BestIndex].bHunter});
 	}
+	// Queue is consumed from the back, so reserve the earliest ticket for Last().
+	Queue.Reset();
+	for (int32 Index = Ordered.Num() - 1; Index >= 0; --Index) { Queue.Add(Ordered[Index]); }
 	++State.WaveIndex;
 	State.Phase = EArenaWavePhase::Warning;
 	State.bSpawnBlocked = false;
@@ -92,10 +117,11 @@ bool UArenaWaveDirectorComponent::RequestNextWave(APawn* Requester, int32 Expect
 	return true;
 }
 
-bool UArenaWaveDirectorComponent::TrySpawn(bool bHunter)
+bool UArenaWaveDirectorComponent::TrySpawn(const FArenaSpawnRequest& Request)
 {
 	UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-	if (!Nav || !Core || !MonsterClass || WaveEntrances.IsEmpty()) { return false; }
+	const FArenaMonsterConfig* Type = Definition ? Definition->FindMonster(Request.MonsterId) : nullptr;
+	if (!Nav || !Core || !MonsterClass || !Type || WaveEntrances.IsEmpty()) { return false; }
 	const AArenaMonster* Defaults = MonsterClass->GetDefaultObject<AArenaMonster>();
 	const float HalfHeight = Defaults->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 	const float Radius = Defaults->GetCapsuleComponent()->GetScaledCapsuleRadius();
@@ -120,12 +146,13 @@ bool UArenaWaveDirectorComponent::TrySpawn(bool bHunter)
 		FTransform Transform(Entrance->GetActorRotation(), SpawnLocation);
 		AArenaMonster* Monster = GetWorld()->SpawnActorDeferred<AArenaMonster>(MonsterClass, Transform, GetOwner(), nullptr, ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding);
 		if (!Monster) { continue; }
+		Monster->ApplyConfig(*Type);
 		Monster->DefenseTarget = Core;
-		Monster->bHunter = bHunter;
+		Monster->bHunter = Request.bHunter;
 		Monster->WaveDirector = this;
 		Monster->FinishSpawning(Transform);
 		if (!IsValid(Monster)) { continue; }
-		Living.Add(Monster, bHunter);
+		Living.Add(Monster, Request);
 		Monster->OnDestroyed.AddDynamic(this, &ThisClass::OnMonsterDestroyed);
 		EntranceCursor = (EntranceIndex + 1) % WaveEntrances.Num();
 		return true;
@@ -185,9 +212,9 @@ void UArenaWaveDirectorComponent::OnMonsterDestroyed(AActor* Actor)
 {
 	AArenaMonster* Monster = Cast<AArenaMonster>(Actor);
 	if (!GetOwner()->HasAuthority() || bCleaning) { return; }
-	if (const bool* Hunter = Living.Find(Monster))
+	if (const FArenaSpawnRequest* Pending = Living.Find(Monster))
 	{
-		Queue.Add(*Hunter); Living.Remove(Monster);
+		Queue.Add(*Pending); Living.Remove(Monster);
 		if (State.Phase == EArenaWavePhase::Clearing) { State.Phase = EArenaWavePhase::Spawning; }
 		Publish();
 	}

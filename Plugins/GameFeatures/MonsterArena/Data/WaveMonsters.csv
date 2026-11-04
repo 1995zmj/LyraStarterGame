@@ -1,0 +1,13 @@
+Wave,MonsterId,Count,Role
+1,Grunt,12,Assault
+2,Grunt,16,Assault
+2,Runner,4,Hunter
+3,Grunt,16,Assault
+3,Runner,8,Hunter
+3,Brute,6,Assault
+4,Grunt,16,Assault
+4,Runner,12,Hunter
+4,Brute,12,Assault
+5,Grunt,18,Assault
+5,Runner,16,Hunter
+5,Brute,16,Assault

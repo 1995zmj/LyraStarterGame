@@ -36,7 +36,7 @@ void FMonsterArenaFindTargetEvaluator::Tick(FStateTreeExecutionContext& Context,
 	}
 	Data.SearchRemaining = FMath::Max(SearchInterval, 0.05f);
 	APawn* Target = nullptr;
-	float Nearest = FMath::Square(Monster->DetectionRadius);
+	float Nearest = FMath::Square(Monster->MonsterConfig.DetectionRadius);
 	for (FConstPlayerControllerIterator It = Monster->GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		APawn* Candidate = It->Get() ? It->Get()->GetPawn() : nullptr;

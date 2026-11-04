@@ -127,10 +127,10 @@ Runtime C++ 测试及调用入口受 `WITH_DEV_AUTOMATION_TESTS` 保护。当前
 
 ## 守点波次验收
 
-`Python/validate_monster_waves.py` 使用有渲染双人 PIE。沿用上面的 `-ExecutePythonScript` 命令，将脚本替换为该路径，输出独立 `MonsterArenaWavesNetwork*.log`。测试临时把每波设为 3 进攻兵＋1 猎手、同时最多 2 只，以覆盖五波状态转换；不保存测试配置，不代表默认 152 只敌人的完整节奏／压力验收。
+`Python/validate_monster_waves.py` 使用有渲染双人 PIE。沿用上面的 `-ExecutePythonScript` 命令，将脚本替换为该路径，输出独立 `MonsterArenaWavesNetwork*.log`。测试临时把每波设为 3 个 Grunt（进攻）＋1 个 Runner（猎手）、同时最多 2 只，以覆盖五波状态转换和同波混合类型；不保存测试配置，不代表默认 152 只敌人的完整节奏／压力验收。
 
-覆盖客户端发起、距离及旧编号拒绝、重复启动、数量上限、销毁补位、五波清场、胜负复制、重置成长、受阻重试、双人死亡期间继续生成、真实 AI 攻击核心与离局重进。Editor 测试桥接位于 `Private/Tests/MonsterArenaWaveTestLibrary`；结果为 `Saved/Logs/MonsterArenaWavesResult.json`，重复运行前保留旧结果。成功标记 `MONSTER_ARENA_WAVES_SUCCEEDED`。
+覆盖客户端发起、距离及旧编号拒绝、重复启动、数量上限、销毁补位、同波混合怪物、配置数值生效、五波清场、胜负复制、重置成长、受阻重试、双人死亡期间继续生成、真实 AI 攻击核心与离局重进。Editor 测试桥接位于 `Private/Tests/MonsterArenaWaveTestLibrary`；结果为 `Saved/Logs/MonsterArenaWavesResult.json`，重复运行前保留旧结果。成功标记 `MONSTER_ARENA_WAVES_SUCCEEDED`。
 
 `Python/preview_monster_waves.py` 启动单人预览，把玩家放到核心附近并摆好相机；不启动波次、不自动射击、不授予无敌。真实 N／手柄→ 启动，U 选卡。必须通过实际输入和画面另行验收。
 
-`Python/validate_wave_csv.py` 用 `-run=pythonscript -script=...` 运行，检查 CSV → DA 全字段、重复导入、默认组件绑定，以及 17 组非法输入不修改已有资产。成功标记为 `MONSTER_ARENA_WAVES_CSV_VALIDATION_SUCCEEDED`。
+`Python/validate_wave_csv.py` 用 `-run=pythonscript -script=...` 运行，检查四张波次 CSV → DA 的波次、怪物目录、每波类型选择全字段、重复导入、默认组件绑定，以及 30 组非法输入不修改已有资产。成功标记为 `MONSTER_ARENA_WAVES_CSV_VALIDATION_SUCCEEDED`。

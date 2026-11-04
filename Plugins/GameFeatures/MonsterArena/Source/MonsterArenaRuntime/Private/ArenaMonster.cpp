@@ -6,6 +6,7 @@
 #include "Net/UnrealNetwork.h"
 
 #include "ArenaMeleeDamageEffect.h"
+#include "ArenaMonsterConfig.h"
 #include "Components/StateTreeComponent.h"
 #include "StateTree.h"
 #include "AbilitySystem/LyraAbilitySystemComponent.h"
@@ -17,10 +18,11 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/PlayerController.h"
-#include "GameFramework/PlayerState.h"
-#include "RunProgressionComponent.h"
+#include "GameFramework/GameplayMessageSubsystem.h"
+#include "Messages/LyraVerbMessage.h"
 #include "UObject/ConstructorHelpers.h"
+
+UE_DEFINE_GAMEPLAY_TAG(TAG_MonsterArena_Elimination_Message, "MonsterArena.Elimination.Message");
 
 AArenaMonster::AArenaMonster(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -33,15 +35,15 @@ AArenaMonster::AArenaMonster(const FObjectInitializer& ObjectInitializer)
 	HealthSet = CreateDefaultSubobject<ULyraHealthSet>(TEXT("HealthSet"));
 	CombatSet = CreateDefaultSubobject<ULyraCombatSet>(TEXT("CombatSet"));
 	HealthComponent = CreateDefaultSubobject<UArenaMonsterHealthComponent>(TEXT("Health"));
-	UStaticMeshComponent* Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PrototypeBody"));
+	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PrototypeBody"));
 	Body->SetupAttachment(GetCapsuleComponent());
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Body->SetRelativeScale3D(FVector(0.7f, 0.7f, 1.5f));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> BodyMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	Body->SetStaticMesh(BodyMesh.Object);
+	ApplyBodyScale();
 	GetCapsuleComponent()->SetCollisionProfileName(TEXT("Pawn"));
 	GetCapsuleComponent()->SetCollisionResponseToAllChannels(ECR_Block);
-	GetCharacterMovement()->MaxWalkSpeed = 220.0f;
+	GetCharacterMovement()->MaxWalkSpeed = MonsterConfig.MoveSpeed;
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
 	StateTreeComponent = CreateDefaultSubobject<UStateTreeComponent>(TEXT("StateTree"));
 	StateTreeComponent->SetStartLogicAutomatically(false);
@@ -52,6 +54,29 @@ UAbilitySystemComponent* AArenaMonster::GetAbilitySystemComponent() const
 	return AbilitySystem;
 }
 
+void AArenaMonster::ApplyConfig(const FArenaMonsterConfig& Config)
+{
+	MonsterConfig = Config;
+	OnRep_MonsterConfig();
+}
+
+void AArenaMonster::OnRep_MonsterConfig()
+{
+	if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+	{
+		Movement->MaxWalkSpeed = MonsterConfig.MoveSpeed;
+	}
+	ApplyBodyScale();
+}
+
+void AArenaMonster::ApplyBodyScale()
+{
+	if (Body)
+	{
+		Body->SetRelativeScale3D(FVector(0.7f, 0.7f, 1.5f) * FMath::Max(MonsterConfig.BodyScale, 0.01f));
+	}
+}
+
 void UArenaMonsterHealthComponent::HandleOutOfHealth(AActor* InstigatorActor, AActor* Causer, const FGameplayEffectSpec* Spec, float Magnitude, float OldValue, float NewValue)
 {
 	// The owning monster settles its death through HealthSet::OnOutOfHealth.
@@ -60,10 +85,11 @@ void UArenaMonsterHealthComponent::HandleOutOfHealth(AActor* InstigatorActor, AA
 void AArenaMonster::BeginPlay()
 {
 	Super::BeginPlay();
+	OnRep_MonsterConfig();
 	AbilitySystem->InitAbilityActorInfo(this, this);
 	if (HasAuthority())
 	{
-		AbilitySystem->SetNumericAttributeBase(ULyraHealthSet::GetMaxHealthAttribute(), InitialHealth);
+		AbilitySystem->SetNumericAttributeBase(ULyraHealthSet::GetMaxHealthAttribute(), MonsterConfig.InitialHealth);
 	}
 	HealthComponent->InitializeWithAbilitySystem(AbilitySystem);
 	HealthSet->OnOutOfHealth.AddUObject(this, &ThisClass::HandleOutOfHealth);
@@ -92,26 +118,21 @@ void AArenaMonster::HandleOutOfHealth(AActor* InstigatorActor, AActor* Causer, c
 	StateTreeComponent->StopLogic(TEXT("Monster died"));
 	AITarget.Reset();
 	AActor* Source = Spec ? Spec->GetContext().GetOriginalInstigator() : InstigatorActor;
-	APlayerState* Player = Cast<APlayerState>(Source);
-	if (const APawn* Pawn = Cast<APawn>(Source))
-	{
-		Player = Pawn->GetPlayerState();
-	}
-	if (const AController* SourceController = Cast<AController>(Source))
-	{
-		Player = SourceController->PlayerState;
-	}
 	FGameplayTagContainer AssetTags;
 	if (Spec)
 	{
 		Spec->GetAllAssetTags(AssetTags);
 	}
-	if (Player && Player != GetPlayerState() && Spec && !AssetTags.HasTag(TAG_Gameplay_DamageSelfDestruct))
+	// Announce the death only; the server-side kill-credit handler decides whether and how much to award.
+	if (Source && Spec && !AssetTags.HasTag(TAG_Gameplay_DamageSelfDestruct))
 	{
-		if (URunProgressionComponent* Progress = Player->FindComponentByClass<URunProgressionComponent>())
-		{
-			Progress->RecordMonsterKill(this, ExperienceReward);
-		}
+		FLyraVerbMessage Message;
+		Message.Verb = TAG_MonsterArena_Elimination_Message;
+		Message.Instigator = Source;
+		Message.Target = this;
+		Message.InstigatorTags = *Spec->CapturedSourceTags.GetAggregatedTags();
+		Message.TargetTags = *Spec->CapturedTargetTags.GetAggregatedTags();
+		UGameplayMessageSubsystem::Get(GetWorld()).BroadcastMessage(Message.Verb, Message);
 	}
 	HealthComponent->StartDeath();
 	HealthComponent->FinishDeath();
@@ -120,9 +141,19 @@ void AArenaMonster::HandleOutOfHealth(AActor* InstigatorActor, AActor* Causer, c
 	SetLifeSpan(0.2f);
 }
 
+float AArenaMonster::GetHealth() const
+{
+	return HealthComponent ? HealthComponent->GetHealth() : 0.0f;
+}
+
+float AArenaMonster::GetMaxHealth() const
+{
+	return HealthComponent ? HealthComponent->GetMaxHealth() : 0.0f;
+}
+
 bool AArenaMonster::IsAliveForAI() const
 {
-	return HasAuthority() && !bDeathSettled && HealthComponent->GetHealth() > 0.0f && !HealthComponent->IsDeadOrDying();
+	return HasAuthority() && !bDeathSettled && GetHealth() > 0.0f && !HealthComponent->IsDeadOrDying();
 }
 
 bool AArenaMonster::IsValidAITarget(const APawn* Target) const
@@ -130,13 +161,13 @@ bool AArenaMonster::IsValidAITarget(const APawn* Target) const
 	if (DefenseTarget && Target == DefenseTarget) { return IsValid(DefenseTarget) && DefenseTarget->Health > 0; }
 	const ULyraHealthComponent* Health = ULyraHealthComponent::FindHealthComponent(Target);
 	return IsValid(Target) && Target->IsPlayerControlled() && Health && Health->GetHealth() > 0.0f && !Health->IsDeadOrDying()
-		&& FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) <= FMath::Square(DetectionRadius);
+		&& FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) <= FMath::Square(MonsterConfig.DetectionRadius);
 }
 
 bool AArenaMonster::IsTargetInMeleeRange() const
 {
 	const APawn* Target = AITarget.Get();
-	return IsValidAITarget(Target) && FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) <= FMath::Square(MeleeRange);
+	return IsValidAITarget(Target) && FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) <= FMath::Square(MonsterConfig.MeleeRange);
 }
 
 void AArenaMonster::TryMeleeAttack()
@@ -145,19 +176,19 @@ void AArenaMonster::TryMeleeAttack()
 	{
 		return;
 	}
-	NextAttackTime = GetWorld()->GetTimeSeconds() + FMath::Max(AttackInterval, 0.1f);
+	NextAttackTime = GetWorld()->GetTimeSeconds() + FMath::Max(MonsterConfig.AttackInterval, 0.1f);
 	APawn* Target = AITarget.Get();
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(MonsterMelee), false, this);
 	FHitResult Hit;
 	if (!GetWorld()->LineTraceSingleByChannel(Hit, GetActorLocation(), Target->GetActorLocation(), ECC_Visibility, Params) || Hit.GetActor() == Target)
 	{
-		if (AArenaDefenseCore* Core = Cast<AArenaDefenseCore>(Target)) { Core->ApplyEnemyDamage(MeleeDamage); return; }
+		if (AArenaDefenseCore* Core = Cast<AArenaDefenseCore>(Target)) { Core->ApplyEnemyDamage(MonsterConfig.MeleeDamage); return; }
 		if (UAbilitySystemComponent* TargetASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target))
 		{
 			FGameplayEffectSpecHandle DamageSpec = AbilitySystem->MakeOutgoingSpec(UArenaMeleeDamageEffect::StaticClass(), 1.0f, AbilitySystem->MakeEffectContext());
 			if (DamageSpec.IsValid())
 			{
-				DamageSpec.Data->SetSetByCallerMagnitude(TAG_MonsterArena_MeleeDamage, MeleeDamage);
+				DamageSpec.Data->SetSetByCallerMagnitude(TAG_MonsterArena_MeleeDamage, MonsterConfig.MeleeDamage);
 				AbilitySystem->ApplyGameplayEffectSpecToTarget(*DamageSpec.Data.Get(), TargetASC);
 			}
 		}
@@ -213,5 +244,6 @@ APawn* AArenaMonster::ResolveWaveTarget(APawn* Candidate)
 void AArenaMonster::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AArenaMonster, MonsterConfig);
 	DOREPLIFETIME(AArenaMonster, bHunter);
 }

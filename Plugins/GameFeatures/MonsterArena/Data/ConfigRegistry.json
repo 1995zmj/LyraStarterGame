@@ -11,7 +11,7 @@
     {
       "id": "waves",
       "label": "守点波次",
-      "sources": ["Waves.csv", "WaveSettings.csv"],
+      "sources": ["Waves.csv", "WaveMonsters.csv", "Monsters.csv", "WaveSettings.csv"],
       "outputs": ["/MonsterArena/Data/DA_ArenaWaves"],
       "depends_on": []
     }

@@ -10,7 +10,6 @@
 class ULyraAbilitySystemComponent;
 class ULyraInventoryItemInstance;
 struct FLyraVerbMessage;
-class AArenaMonster;
 
 USTRUCT(BlueprintType)
 struct FRunRewardGrant
@@ -96,8 +95,6 @@ public:
 	int32 GetExperienceRequired() const;
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void AddExperience(int32 Amount);
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-	void RecordMonsterKill(AArenaMonster* Victim, int32 ExperienceReward);
 	UFUNCTION(BlueprintPure)
 	float GetDamagePerKill() const;
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
@@ -132,9 +129,11 @@ private:
 	bool ApplyPersistentReward(const FRunRewardOption& Card, TArray<FActiveGameplayEffectHandle>& OutHandles);
 	bool RefreshRewards();
 	void RemoveRewards();
-	void OnEliminationMessage(FGameplayTag Channel, const FLyraVerbMessage& Message);
+	/** Single kill-credit entry for player eliminations and monster deaths. */
+	void OnKillMessage(FGameplayTag Channel, const FLyraVerbMessage& Message);
 	void CreditKill(AActor* Victim, int32 ExperienceReward);
 	FGameplayMessageListenerHandle EliminationListener;
+	FGameplayMessageListenerHandle MonsterKillListener;
 	TSet<TWeakObjectPtr<AActor>> CreditedVictims;
 	FActiveGameplayEffectHandle KillDamageHandle;
 	float AppliedKillDamage = 0.0f;

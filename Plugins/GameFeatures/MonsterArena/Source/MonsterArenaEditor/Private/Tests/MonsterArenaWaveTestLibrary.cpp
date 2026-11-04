@@ -21,7 +21,12 @@ void UMonsterArenaWaveTestLibrary::UseShortWaves(UArenaWaveDirectorComponent* Di
 	Director->Definition = NewObject<UArenaWaveDefinition>(Director);
 	for (FArenaWaveConfig& Wave : Director->Definition->Waves)
 	{
-		Wave.AssaultCount = 3; Wave.HunterCount = 1; Wave.AliveLimit = 2;
+		Wave.Monsters.Reset();
+		FArenaWaveMonsterEntry& Assault = Wave.Monsters.AddDefaulted_GetRef();
+		Assault.MonsterId = TEXT("Grunt"); Assault.Count = 3;
+		FArenaWaveMonsterEntry& Hunter = Wave.Monsters.AddDefaulted_GetRef();
+		Hunter.MonsterId = TEXT("Runner"); Hunter.Count = 1; Hunter.bHunter = true;
+		Wave.AliveLimit = 2;
 		Wave.BatchSize = 2; Wave.BatchInterval = 0.5f;
 	}
 	Director->Definition->WarningDuration = 0.3f;

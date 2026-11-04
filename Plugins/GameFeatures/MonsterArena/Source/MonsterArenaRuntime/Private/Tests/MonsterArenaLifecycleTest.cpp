@@ -203,13 +203,16 @@ void TickMonsterArenaLifecycleTest(ALyraPlayerState* Player, float DeltaTime)
 		Progress->SetComponentTickEnabled(false);
 	}
 	Test.PreviousPawn = Pawn;
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	Test.Killer = Player->GetWorld()->SpawnActor<AArenaMonster>(AArenaMonster::StaticClass(), Pawn->GetActorLocation() + FVector(100, 0, 0), FRotator::ZeroRotator, Params);
+	const FTransform SpawnTransform(FRotator::ZeroRotator, Pawn->GetActorLocation() + FVector(100, 0, 0));
+	Test.Killer = Player->GetWorld()->SpawnActorDeferred<AArenaMonster>(AArenaMonster::StaticClass(), SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	Verify(Test.Killer.IsValid(), TEXT("Real killer monster spawned"));
 	if (Test.Killer.IsValid())
 	{
-		Test.Killer->MeleeDamage = 1000.0f;
+		// Configuration is written before FinishSpawning; runtime health lives in the health set.
+		FArenaMonsterConfig Config = Test.Killer->MonsterConfig;
+		Config.MeleeDamage = 1000.0f;
+		Test.Killer->ApplyConfig(Config);
+		Test.Killer->FinishSpawning(SpawnTransform);
 		Test.bWaitingForRespawn = true;
 		UE_LOG(LogTemp, Display, TEXT("MonsterArenaLifecycleTest: waiting for monster kill %d"), Test.Deaths + 1);
 	}

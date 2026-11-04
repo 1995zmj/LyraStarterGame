@@ -26,7 +26,7 @@ def check(value, label):
 
 listing = manager.run("list")
 check(len(listing["groups"]) == 2, "Registry lists both configuration groups")
-check(sum(len(g["sources"]) for g in listing["groups"]) == 5, "Registry owns all five CSV sources")
+check(sum(len(g["sources"]) for g in listing["groups"]) == 7, "Registry owns all seven CSV sources")
 check(manager.run("validate")["success"], "All source groups validate without writes")
 groups = manager.registry()
 check(manager.ordered_groups(groups, ["waves"]) == ["waves"], "Single-group selection stays scoped")
@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix="arena-config-manager-") as temporary:
             shutil.copy2(source, target / source.name)
     wave_path = target / "Waves.csv"
     original = wave_path.read_text(encoding="utf-8-sig")
-    wave_path.write_text(original.replace("1,12,0,6,2,4,1", "1,12,0,0,2,4,1"), encoding="utf-8")
+    wave_path.write_text(original.replace("1,6,2,4,1", "1,0,2,4,1"), encoding="utf-8")
     with patch.object(manager.progression, "apply") as write_progression, patch.object(manager.waves, "apply") as write_waves:
         try:
             manager.run("import", directory=target)
@@ -70,7 +70,7 @@ with tempfile.TemporaryDirectory(prefix="arena-config-manager-") as temporary:
 
     def change_during_validation(directory):
         snapshot = original_validate(directory)
-        wave_path.write_text(original.replace("1,12,0", "1,13,0"), encoding="utf-8")
+        wave_path.write_text(original.replace("1,6,2,4,1", "1,6,2,4.5,1"), encoding="utf-8")
         return snapshot
 
     with patch.object(manager.progression, "validate", side_effect=change_during_validation):
@@ -96,7 +96,7 @@ for attempt in range(2):
     report = manager.run("import")
     check(report["success"] and all(e["status"] == "imported" for e in report["groups"]), "Unified real import " + str(attempt + 1))
     saved = json.loads(Path(report["report_path"]).read_text(encoding="utf-8"))
-    check(saved["success"] and len(saved["source_sha256"]) == 6, "Report persists status and all source fingerprints")
+    check(saved["success"] and len(saved["source_sha256"]) == 8, "Report persists status and all source fingerprints")
 
 # Existing entry points must still validate and author the same assets.
 runpy.run_path(str(ROOT / "Tests/Python/validate_csv_configuration.py"), run_name="__main__")

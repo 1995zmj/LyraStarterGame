@@ -10,6 +10,13 @@ class AArenaDefenseCore;
 UENUM(BlueprintType)
 enum class EArenaWavePhase : uint8 { Preparation, Warning, Spawning, Clearing, Intermission, Victory, Defeat };
 
+/** Server-only spawn ticket; requeued monsters keep the type and role they were scheduled with. */
+struct FArenaSpawnRequest
+{
+	FName MonsterId;
+	bool bHunter = false;
+};
+
 USTRUCT(BlueprintType)
 struct FArenaWaveState
 {
@@ -46,8 +53,8 @@ public:
 private:
 	TArray<TWeakObjectPtr<AActor>> Entrances;
 	TArray<TWeakObjectPtr<AActor>> WaveEntrances;
-	TMap<TWeakObjectPtr<AArenaMonster>, bool> Living;
-	TArray<bool> Queue;
+	TMap<TWeakObjectPtr<AArenaMonster>, FArenaSpawnRequest> Living;
+	TArray<FArenaSpawnRequest> Queue;
 	FArenaWaveConfig CurrentWave;
 	int32 EntranceCursor = 0;
 	int32 BatchRemaining = 0;
@@ -56,6 +63,6 @@ private:
 	bool bCleaning = false;
 	void Publish();
 	void CleanupMonsters();
-	bool TrySpawn(bool bHunter);
+	bool TrySpawn(const FArenaSpawnRequest& Request);
 	UFUNCTION() void OnMonsterDestroyed(AActor* Actor);
 };

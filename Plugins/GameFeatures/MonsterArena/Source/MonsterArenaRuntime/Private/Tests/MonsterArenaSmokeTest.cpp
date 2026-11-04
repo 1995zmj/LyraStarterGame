@@ -53,7 +53,7 @@ static void ExecuteMonsterArenaSmokeTest(UWorld* World, ALyraPlayerState* Player
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 			AArenaMonster* Monster = World->SpawnActor<AArenaMonster>(AArenaMonster::StaticClass(), Player->GetPawn()->GetActorLocation() + FVector(500, 0, 0), FRotator::ZeroRotator, Params);
-			Verify(Monster && Monster->HealthComponent->GetHealth() == 60.0f, TEXT("Monster starts with configured GAS health"));
+			Verify(Monster && Monster->GetHealth() == 60.0f && Monster->GetMaxHealth() == 60.0f, TEXT("Monster starts with configured current and max health"));
 			if (!Monster)
 			{
 				break;
@@ -73,7 +73,8 @@ static void ExecuteMonsterArenaSmokeTest(UWorld* World, ALyraPlayerState* Player
 				ASC->ApplyGameplayEffectSpecToTarget(*Spec.Data, Monster->GetAbilitySystemComponent());
 				if (Kill == 0 && Shot == 0)
 				{
-					Verify(FMath::IsNearlyEqual(Monster->HealthComponent->GetHealth(), 48.0f), TEXT("Real rifle execution deals 12 damage to enemy team"));
+					Verify(FMath::IsNearlyEqual(Monster->GetHealth(), 48.0f) && FMath::IsNearlyEqual(Monster->GetMaxHealth(), 60.0f),
+						TEXT("Real rifle execution lowers current health while max health stays configured"));
 				}
 			}
 			Verify(Progress->State.Kills == Kill + 1, TEXT("Death reward settles once despite repeated lethal hits"));

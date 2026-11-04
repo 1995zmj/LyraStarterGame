@@ -179,7 +179,11 @@ bool UMonsterArenaRewardTestLibrary::KillTestMonster(APawn* Source)
 	const int32 Kills = Progress->State.Kills;
 	// Duplicate settlement must not increment XP, kill count or accumulated damage.
 	const float Accumulated = Progress->State.AccumulatedKillDamage;
-	Progress->RecordMonsterKill(Monster, Monster->ExperienceReward);
+	FLyraVerbMessage Duplicate;
+	Duplicate.Verb = TAG_MonsterArena_Elimination_Message;
+	Duplicate.Instigator = Source->GetPlayerState();
+	Duplicate.Target = Monster;
+	UGameplayMessageSubsystem::Get(Source).BroadcastMessage(Duplicate.Verb, Duplicate);
 	const bool bOnce = Progress->State.Kills == Kills && Progress->State.AccumulatedKillDamage == Accumulated;
 	Monster->Destroy();
 	return bApplied && bOnce;

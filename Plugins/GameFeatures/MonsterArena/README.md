@@ -22,11 +22,11 @@ HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `U
 
 编译 `LyraEditor Win64 Development` 后重新打开编辑器。在内容浏览器启用插件内容，打开 `/MonsterArena/Maps/L_MonsterArena` 并运行 PIE。该地图使用 `/MonsterArena/System/Experiences/B_MonsterArena`，启用 ShooterCore 和 MonsterArena。玩法入口资源为 `/MonsterArena/System/Playlists/DA_MonsterArena`。
 
-每个新角色自动装备步枪。怪物由独立波次导演从四个 `MonsterSpawn` 标签出生点分批生成。靠近圆柱核心（450 单位内），按 `N` 或手柄右方向键开始；预警 3 秒后出怪。每波清场后进入整备，手动启动下一波，第五波清场胜利。核心 1000 生命，被摧毁即失败并清理待生成队列和活怪。胜负后存活玩家可按同一按键重置对局；复活期间可等复活后操作。怪物生命 60、移动速度 220，140 单位内每秒近战造成 10 点伤害。AI 由 `/MonsterArena/AI/ST_ArenaMonster` 驱动，怪物 Actor Tick 已禁用。波次怪物沿导航路径移动；进攻兵优先核心、猎手优先玩家，无存活玩家时都进攻核心。
+每个新角色自动装备步枪。怪物由独立波次导演从四个 `MonsterSpawn` 标签出生点分批生成。靠近圆柱核心（450 单位内），按 `N` 或手柄右方向键开始；预警 3 秒后出怪。每波清场后进入整备，手动启动下一波，第五波清场胜利。核心 1000 生命，被摧毁即失败并清理待生成队列和活怪。胜负后存活玩家可按同一按键重置对局；复活期间可等复活后操作。怪物数值由 `Monsters.csv` 按类型配置：默认 Grunt 生命 60、移速 220、每次近战 10 伤害，Runner 生命 40、移速 320，Brute 生命 160、移速 150、每次近战 24 伤害。AI 由 `/MonsterArena/AI/ST_ArenaMonster` 驱动，怪物 Actor Tick 已禁用。波次怪物沿导航路径移动；进攻兵优先核心、猎手优先玩家，无存活玩家时都进攻核心。
 
 ## 怪物 StateTree
 
-`AArenaMonster` 的 `StateTreeComponent` 仅在服务端完成生命组件初始化后启动，客户端只接收角色移动和生命复制。`StateTreeAsset` 可配置使用的树，默认指向 `ST_ArenaMonster`；感知半径、近战距离、攻击间隔分别由 `DetectionRadius`、`MeleeRange`、`AttackInterval` 配置。
+`AArenaMonster` 的 `StateTreeComponent` 仅在服务端完成生命组件初始化后启动，客户端只接收角色移动、生命和 `MonsterConfig` 复制。`StateTreeAsset` 可配置使用的树，默认指向 `ST_ArenaMonster`；感知半径、近战距离、攻击间隔分别由 `MonsterConfig.DetectionRadius`、`MonsterConfig.MeleeRange`、`MonsterConfig.AttackInterval` 配置。
 
 树中包含三个状态，条件和转换可在 StateTree 编辑器中调整：
 
@@ -40,7 +40,7 @@ HUD 的可编辑界面位于 `/MonsterArena/UI/W_MonsterArenaHUD`，父类为 `U
 
 节点代码位于 Runtime 的 `Public/AI`、`Private/AI/MonsterArenaStateTreeNodes`。Editor 专用 `MonsterArenaStateTreeLibrary` 和 `Content/Python/setup_monster_arena_ai.py` 创建并编译资产；完整初始化脚本也会调用。已存在的树保留设计器修改，生成器不重建覆盖。运行生成脚本前结束其他进程对该资产的使用，避免 Windows 文件占用导致保存失败。
 
-每只怪物给予击杀玩家 20 XP。初始 1 级，经验门槛依次为 60、100、140、180、220、260、300、340、380，最高 10 级。经验溢出保留，可连续升级；每升一级增加一次选卡机会。达到等级上限不会清除尚未使用的机会。
+每只怪物给予击杀玩家 20 XP。击杀结算统一由 `URunProgressionComponent` 监听 `Lyra.Elimination.Message` 与 `MonsterArena.Elimination.Message` 处理：玩家淘汰和怪物死亡都进入同一个 `OnKillMessage` → `CreditKill` 路径。怪物死亡只广播 `MonsterArena.Elimination.Message` 并携带击杀来源，不直接查找成长组件或发放经验；经验值由成长组件按死亡怪物配置结算。初始 1 级，经验门槛依次为 60、100、140、180、220、260、300、340、380，最高 10 级。经验溢出保留，可连续升级；每升一级增加一次选卡机会。达到等级上限不会清除尚未使用的机会。
 
 - 升级只更新 HUD 的“可选强化 ×N”提示，不自动打开界面，也不自动增加属性。
 - 默认按 `U` 或手柄上方向键手动打开强化界面。输入动作的稳定映射名为 `MonsterArena.OpenRewards`，提示读取实际映射按键。默认使用 `U` 避开项目中 `K` 的自毁调试快捷键。
@@ -85,7 +85,7 @@ MonsterArena 通过 Lyra QuickBar 添加并选择步枪，射击、换弹和 HUD
 - `MonsterArenaRuntime`：成长状态、卡池、奖励效果、怪物，以及 `Public/UI`、`Private/UI` 下的 HUD 和 CommonUI 选卡界面。HUD 使用 `W_MonsterArenaHUD` 的设计器布局；选卡界面实现在 `Private/UI/MonsterArenaRewardScreen.cpp`，`RewardScreenClass` 提供界面子类入口。独立的 `MonsterArenaRewardInputAction.h/.cpp` 定义选卡快捷键 Action。
 - `MonsterArenaEditor`：`UMonsterArenaContentLibrary` 资源配置接口，以及 `Private/Tests/` 下的编辑器测试桥接。Runtime 不依赖 Editor；Editor 模块不进入游戏运行时目标。
 - `Content/Python/setup_monster_arena.py`：创建和配置插件专属 GameFeatureData、Experience、地图和玩法入口；已有 Experience 和地图布置保留。
-- `UMonsterArenaComponent`：装备、HUD 生命周期与波次导演接入；`WaveDefinition` 引用波次配置。旧 `MaxAliveMonsters <= 0` 仅保留为测试暂停开关，正数不覆盖波次上限；旧 SpawnInterval 已废弃。`AArenaMonster`：初始生命、经验奖励和近战伤害，使用独立 ASC，无需怪物 PlayerState；AI 使用本插件的 StateTree 和独立节点代码。
+- `UMonsterArenaComponent`：装备、HUD 生命周期与波次导演接入；`WaveDefinition` 引用波次配置。旧 `MaxAliveMonsters <= 0` 仅保留为测试暂停开关，正数不覆盖波次上限；旧 SpawnInterval 已废弃。`AArenaMonster`：共享怪物类，使用独立 ASC，无需怪物 PlayerState；初始生命、近战伤害、移速、侦测半径、近战距离、攻击间隔、经验奖励和仅表现用的体型倍率统一保存在 `MonsterConfig`（`FArenaMonsterConfig`）中，在生成前注入并整体复制，运行时不再改写。运行时生命值单独存放在 GAS 的复制属性 `ULyraHealthSet::Health`（当前生命）与 `MaxHealth`（最大生命）中，`MonsterConfig.InitialHealth` 只在生成时作为最大生命初值；`GetHealth()`／`GetMaxHealth()` 提供只读访问。AI 使用本插件的 StateTree 和独立节点代码。
 
 专用蓝图和配置位于 `/MonsterArena/`：`UI/Notifications` 保存击杀播报，`UI/Weapons` 保存准星，`Weapons` 保存物品定义，`Characters/B_MonsterArenaShooterHero` 继承共享射击角色并覆盖本地初始物品。`System/HeroData_MonsterArena` 和 `System/Experiences/LAS_MonsterArena_Components` 将它们接入对局。通用枪械能力、模型、动画和基础 HUD 继续复用 ShooterCore。
 
@@ -99,17 +99,19 @@ MonsterArena 通过 Lyra QuickBar 添加并选择步枪，射击、换弹和 HUD
 
 ## 守点波次配置
 
-波次数值来源为 `Data/Waves.csv` 与 `Data/WaveSettings.csv`，编辑后运行 `Content/Python/import_waves_csv.py`，生成 `/MonsterArena/Data/DA_ArenaWaves`。运行时读取 DataAsset，不读取磁盘 CSV；直接修改 DataAsset 的数值会在下一次导入时覆盖。`Content/Python/setup_monster_arena_waves.py` 创建缺失的核心和导航边界，保留已有位置，重建导航并调用 CSV 导入。完整 setup 也调用此入口。
+波次数值来源为 `Data/Waves.csv`、`Data/WaveMonsters.csv`、`Data/Monsters.csv` 与 `Data/WaveSettings.csv`，编辑后运行 `Content/Python/import_waves_csv.py`，生成 `/MonsterArena/Data/DA_ArenaWaves`。运行时读取 DataAsset，不读取磁盘 CSV；直接修改 DataAsset 的数值会在下一次导入时覆盖。`Content/Python/setup_monster_arena_waves.py` 创建缺失的核心和导航边界，保留已有位置，重建导航并调用 CSV 导入。完整 setup 也调用此入口。
 
-| 波次 | 进攻兵 | 猎手 | 存活上限 | 每批数量 | 批次间隔 | 入口数 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 12 | 0 | 6 | 2 | 4 秒 | 1 |
-| 2 | 16 | 4 | 8 | 3 | 4 秒 | 2 |
-| 3 | 22 | 8 | 12 | 4 | 4 秒 | 2 |
-| 4 | 28 | 12 | 16 | 5 | 3.5 秒 | 3 |
-| 5 | 34 | 16 | 20 | 6 | 3 秒 | 4 |
+`Monsters.csv` 是怪物类型目录：`MonsterId`、初始生命、近战伤害、移速、经验奖励、侦测半径、近战距离、攻击间隔和 `BodyScale`。`BodyScale` 只缩放原型表现模型，不改变碰撞胶囊与玩法判定。`WaveMonsters.csv` 用 `Wave,MonsterId,Count,Role` 为每一波选择任意多种怪物；`Role` 为 `Assault`（向核心推进）或 `Hunter`（优先追玩家）。波次请求时校验所有 `MonsterId` 均存在于目录且数值合法，未知类型拒绝开波。
 
-每批内部间隔 0.3 秒。批次间隔从本批最后一只成功生成起计算；达到存活上限等待空位，不追赶积压时间。猎手均匀穿插，入口轮转。生成前校验胶囊空间、导航连通性及距玩家至少 350 单位；失败保留配额并换位置／入口重试，连续受阻 10 秒显示提示并记录一次 Warning，恢复后自动清除提示。不能将生成失败当作清场。
+| 波次 | 怪物组成 | 存活上限 | 每批数量 | 批次间隔 | 入口数 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Grunt×12（进攻） | 6 | 2 | 4 秒 | 1 |
+| 2 | Grunt×16（进攻）、Runner×4（猎手） | 8 | 3 | 4 秒 | 2 |
+| 3 | Grunt×16（进攻）、Runner×8（猎手）、Brute×6（进攻） | 12 | 4 | 4 秒 | 2 |
+| 4 | Grunt×16（进攻）、Runner×12（猎手）、Brute×12（进攻） | 16 | 5 | 3.5 秒 | 3 |
+| 5 | Grunt×18（进攻）、Runner×16（猎手）、Brute×16（进攻） | 20 | 6 | 3 秒 | 4 |
+
+每批内部间隔 0.3 秒。批次间隔从本批最后一只成功生成起计算；达到存活上限等待空位，不追赶积压时间。不同类型按配额做赤字轮询穿插，避免一次性刷完一种再刷另一种；异常销毁补位时保留原 `MonsterId` 与角色。入口轮转。生成前校验胶囊空间、导航连通性及距玩家至少 350 单位；失败保留配额并换位置／入口重试，连续受阻 10 秒显示提示并记录一次 Warning，恢复后自动清除提示。不能将生成失败当作清场。
 
 正常死亡在一次性死亡结算时扣减活怪；未死亡即异常销毁的怪物补回配额，不发击杀奖励。追逐中连续 15 秒几乎未位移会回收并补位。新对局与退出先清队列并解绑，再销毁旧怪，避免触发补位。胜负、波次、计数与核心生命由服务端决定并复制；下一波请求带对局／波次编号，经玩家所属组件 RPC 校验，客户端不能指定数量或收益。重置会清局内成长，不代表恢复玩家生命与库存至新开局装载；完整重新入场可退出后重进。
 

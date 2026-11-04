@@ -1,0 +1,4 @@
+MonsterId,InitialHealth,MeleeDamage,MoveSpeed,ExperienceReward,DetectionRadius,MeleeRange,AttackInterval,BodyScale
+Grunt,60,10,220,20,4000,140,1,1
+Runner,40,6,320,15,4500,120,0.8,0.75
+Brute,160,24,150,45,3500,170,1.5,1.45

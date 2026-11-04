@@ -2,6 +2,47 @@
 
 更新日期：2026-11-04，时区 Asia/Shanghai。以下按轮次保留历史结果。
 
+## 怪物配置收拢为单一结构体（2026-11-04）
+
+- `AArenaMonster` 不再暴露九个分散的复制属性，改为唯一成员 `FArenaMonsterConfig MonsterConfig`（`ReplicatedUsing = OnRep_MonsterConfig`，`DOREPLIFETIME` 整体复制）。`ApplyConfig` 在 FinishSpawning 前写入结构体并立即应用；客户端收到配置后由 `OnRep_MonsterConfig` 同步移速和仅表现用的体型缩放。生命初始化、StateTree 感知／近战／攻击间隔、近战伤害与击杀经验全部从 `MonsterConfig` 读取。
+- 文档同步：`README.md` 的 StateTree 和代码归属段落改为 `MonsterConfig.*` 与“整体复制”表述。CSV 字段、DataAsset schema 和导入器未变，本轮未重新导入 `DA_ArenaWaves`。
+- `LyraEditor Win64 Development` 构建成功，退出码 0，`Saved/Logs/MonsterArenaMonsterStruct-Build.log` 为 0 Error／0 Warning。
+- 有渲染双人 PIE（`validate_monster_waves.py`，新增客户端整结构体断言）：`Saved/Logs/MonsterArenaWavesResult.json` 为 `passed: true`、65 项检查，标记 `MONSTER_ARENA_WAVES_SUCCEEDED`。客户端实际收到 `monster_config`，Grunt 为 60 生命／220 移速、Runner 为 40／320，与服务端目录一致；首波混合类型、五波清场、补位、受阻重试、双方复制及退出重进等原有断言继续通过。
+- `MonsterArenaMonsterStruct-WavesR2.log` 完整日志 **4 Error／21 Warning**，无 Fatal／Ensure／断言／蓝图运行时异常／Python Traceback。Error 为 3 条引擎 `UE::UnifiedErrorTest` 自检输出和既有 PixelStreaming2RTC `GEngine is not valid`；Warning 为音频采样率 10、出生蒙太奇 6、CrowdFollowing 3、MCP 许可 1，以及测试主动置空 `MonsterClass` 触发的 1 条预期 spawn blocked。日志含 `LogExit` 和 `Log file closed`，但进程退出码为 139，不计为正常退出。前一轮无客户端断言的同脚本运行（`MonsterArenaMonsterStruct-Waves-PreClient.log`、`MonsterArenaWavesResult-MonsterStructPreclient.json`，63 项）通过且退出码 0，一并保留。
+- 无界面冒烟 `MonsterArenaMonsterStruct-Smoke.log` 退出码 0，出现 `MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`。完整日志 **74 Error／323 Warning**：Error 为 61 条引擎工具集 Python 初始化错误（启动帧 0 缺少 `AgentSkill`／`PythonTestRunner`／`ToolsetDefinition`）和 13 条 `AutomationTest: Condition failed`；Warning 为 297 条 TextLocalizationResource、21 条 EditorDataStorageUI、4 条无渲染 Niagara Script Warning、1 条 CrowdFollowing。无 Fatal／Ensure／断言／蓝图运行时异常。**不能视为日志清洁通过**。
+- 无界面生命周期 `MonsterArenaMonsterStruct-Lifecycle.log` 退出码 0，两次真实怪物击杀与自动复活通过，标记 `MONSTER_ARENA_LIFECYCLE_SUCCEEDED`；验证 `MonsterConfig.MeleeDamage` 注入后的击杀、永久奖励恢复和即时奖励不重复发放。完整日志 **74 Error／375 Warning**：Error 类别与冒烟一致；Warning 为 297 条 TextLocalizationResource、21 条 EditorDataStorageUI、56 条无渲染 Niagara／出生表现 Script Warning、1 条 CrowdFollowing。无 Fatal／Ensure／蓝图运行时异常。**不能视为日志清洁通过**。
+- 未执行：默认五波 152 只完整节奏／压力试玩、真实键鼠／手柄输入、专用服务器／断线与打包。CSV 导入、波次 CSV 校验和统一管理器回归因数据和 schema 未改未重复执行，此前结论继续有效。`git diff --check` 通过。
+
+### 配置与运行时生命值分离
+
+- `MonsterConfig` 明确为生成时类型默认值，头文件注释声明运行时不改写；当前生命与最大生命保存在复制的 GAS 属性 `ULyraHealthSet::Health`／`MaxHealth`，`InitialHealth` 只在生成时写入最大生命初值。新增只读接口 `AArenaMonster::GetHealth()`／`GetMaxHealth()` 从生命组件读取运行时值，`IsAliveForAI` 改用该接口；生命周期测试的杀手怪改为 deferred spawn，在 `FinishSpawning` 前用 `ApplyConfig` 写入 `MeleeDamage`，不再直接改运行时 `MonsterConfig`。
+- `LyraEditor Win64 Development` 构建成功，退出码 0，`MonsterArenaRuntimeHealth-Build.log` 为 0 Error／0 Warning。
+- 无界面冒烟 `MonsterArenaRuntimeHealth-Smoke.log` 退出码 0，`MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`；新增断言“生成时当前／最大生命均为 60”和“步枪伤害只降低当前生命、最大生命保持 60”通过。完整日志仍为 **74 Error／323 Warning**，类别与上一轮相同，**不能视为日志清洁通过**。
+- 无界面生命周期 `MonsterArenaRuntimeHealth-Lifecycle.log` 退出码 0，`MONSTER_ARENA_LIFECYCLE_SUCCEEDED`，deferred spawn 的杀手怪正常完成两次击杀与复活回归。完整日志 **74 Error／375 Warning**，类别与上一轮相同，**不能视为日志清洁通过**。
+- 有渲染双人 PIE `MonsterArenaRuntimeHealth-Waves.log` 使用最终代码通过 65 项检查，`MonsterArenaWavesResult.json` 为 `passed: true`，标记 `MONSTER_ARENA_WAVES_SUCCEEDED`；进程退出码 0，`LogExit` 后正常关闭。完整日志 **4 Error／25 Warning**：Error 为 3 条 `UE::UnifiedErrorTest` 自检输出和既有 PixelStreaming2RTC；Warning 为音频采样率 10、出生蒙太奇 6、CrowdFollowing 3、EOS 退出取消 3、HTTP 1、MCP 许可 1 及测试触发的 1 条预期 spawn blocked。无 Fatal／Ensure／断言／蓝图运行时异常／Python Traceback。
+- `README.md` 补充配置与运行时生命值的归属说明。`git diff --check` 通过；二进制改动仍只有 `DA_ArenaWaves.uasset`。
+
+## 怪物类型配置与波次混合选择（2026-11-04）
+
+- 新增 `FArenaMonsterConfig`，把生命、近战伤害、移速、经验、侦测半径、近战距离、攻击间隔和仅表现用的 `BodyScale` 集中到怪物目录；`AArenaMonster` 在 FinishSpawning 前通过 `ApplyConfig` 把整份配置写入唯一成员 `MonsterConfig`，并以 `ReplicatedUsing` 整体复制到客户端（后续结构体重构见上一节）。`FArenaWaveConfig` 改为 `TArray<FArenaWaveMonsterEntry>`，每波可混合任意多种怪物并分别指定 `Count` 与 `Assault`／`Hunter` 角色。导演按配额做赤字轮询穿插，异常销毁补位保留原类型；未知或非法 `MonsterId` 拒绝开波。
+- CSV 拆为 `Waves.csv`（波次节奏）、`WaveMonsters.csv`（每波类型／数量／角色）、`Monsters.csv`（类型数值）和 `WaveSettings.csv`，登记于同一 `waves` 配置组。默认五波总数仍为 152（12／20／30／40／50），从第 2 波起混入 Runner，从第 3 波起混入 Brute。
+- `LyraEditor Win64 Development` 构建成功，退出码 0，`Saved/Logs/MonsterArenaMonsterConfig-Build.log` 为 0 Error／0 Warning（增量目标已是最新）。
+- `MonsterArenaMonsterConfig-Import.log`：四张 CSV 全量校验后导入 `DA_ArenaWaves`，退出码 0，出现 `MONSTER_ARENA_WAVES_CSV_IMPORT_SUCCEEDED`，0 Error／0 Warning。
+- `MonsterArenaMonsterConfig-WaveCSV.log`：两次真实导入并回读波次、怪物目录、每波类型选择、默认组件绑定，30 组非法输入均被拒绝且未改写已保存资产；退出码 0，标记 `MONSTER_ARENA_WAVES_CSV_VALIDATION_SUCCEEDED`，0 Error／0 Warning。
+- `MonsterArenaMonsterConfig-CSVManager.log`：统一管理器 17 项检查通过，包含 7 张 CSV 登记、四张波次源文件全量／单组校验、依赖顺序、未注册 CSV、校验期间源变化和两次真实全量导入；退出码 0，标记 `MONSTER_ARENA_CSV_MANAGER_SUCCEEDED`，0 Error／0 Warning。该回归会重新保存成长奖励相关资产，产生与本功能无关的二进制改动；已用 git 恢复 `B_MonsterArenaProgression`、`DA_MonsterArenaProgression`、`DA_MonsterArenaRewardPool` 和 `B_MonsterArena`，仅保留本功能需要的 `DA_ArenaWaves`。
+- 有渲染双人 PIE（`validate_monster_waves.py`，测试临时改为每波 3 Grunt＋1 Runner）：结果 `Saved/Logs/MonsterArenaWavesResult.json` 为 `passed: true`，标记 `MONSTER_ARENA_WAVES_SUCCEEDED`；新增断言确认三类型目录仍在、首波实际出现 Grunt 与 Runner 两种类型，且 Grunt（60 生命／1.0 体型／220 移速）与 Runner（40／0.75／320）的配置值生效。原有两波上限、销毁补位、五波清场、双人复制、受阻重试、真实 AI 攻击核心、退出重进均通过。
+- 该 PIE 日志 **0 Error／23 Warning**，无 Fatal／Ensure／断言／蓝图运行时异常／Python Traceback。Warning 为音频采样率 10、出生蒙太奇 6、CrowdFollowing 3、HTTP 2、MCP 许可 1，以及测试主动置空 `MonsterClass` 触发的一条预期 `spawn blocked` Warning。引擎日志正常关闭后进程仍以退出码 139 结束，未生成新的 Crash 目录；不能计为“正常退出”，但测试断言和结果 JSON 均已完成。
+- 无界面冒烟测试 `MonsterArenaMonsterConfig-Smoke.log` 退出码 0，出现 `MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`。完整日志 **71 Error／328 Warning**：Error 为既有 58 条引擎工具集 Python 初始化错误与 13 条 `AutomationTest: Condition failed`；Warning 为 297 条 TextLocalizationResource、21 条 EditorDataStorageUI、4 条无渲染 Niagara Script Warning、3 条 Sockets、2 条音频采样率、1 条 CrowdFollowing。无 Fatal／Ensure／断言／蓝图运行时异常，Python Traceback 均属工具集初始化。**不能视为日志清洁通过**。
+- 未执行：默认五波 152 只完整节奏／压力试玩、其他分辨率或 DPI 的体型视觉检查、真实键鼠／手柄输入、专用服务器／断线与打包。`BodyScale` 只验证了属性值和碰撞胶囊不变的设计约束，未做截图比对。`git diff --check` 通过。
+
+## 统一击杀奖励结算（2026-11-04）
+
+- 击杀奖励改为单一控制路径：`AArenaMonster` 死亡时只广播 `MonsterArena.Elimination.Message`（携带伤害来源、怪物与标签），不再查找 `URunProgressionComponent` 或直接加经验；玩家淘汰仍由 `Lyra.Elimination.Message` 进入同一 `URunProgressionComponent::OnKillMessage`，按死亡对象类型结算（怪物读取 `ExperienceReward`，玩家击杀为 0 XP）后统一调用 `CreditKill`。删除公开的 `RecordMonsterKill`，服务端仅注册两条消息监听，`EndPlay` 同时解除。
+- `LyraEditor Win64 Development` 构建成功，退出码 0（`MonsterArenaUnifiedKill-Build.log`）。MonsterArenaRuntime 仍只依赖消息与成长组件，不新增 Editor 依赖；ArenaMonster 不再包含 `RunProgressionComponent.h`。
+- 实际运行无界面冒烟测试：`UnrealEditor-Cmd.exe ... /MonsterArena/Maps/L_MonsterArena -game -MonsterArenaSmokeTest -unattended -NullRHI`，日志 `MonsterArenaSmoke_UnifiedKillReward3.log`，进程退出码 0，输出 `MONSTER_ARENA_SMOKE_SUCCEEDED` 与 `MONSTER_ARENA_REWARD_CHOICES_SUCCEEDED`。该测试用真实步枪伤害击杀 8 只怪物，验证每次死亡只结算一次、共 160 XP 升到 3 级、升级不自动发奖，以及后续显式选卡；重复致命伤害未重复加经验。
+- 完整日志 **71 Error／326 Warning**：Error 为既有 58 条引擎工具集 Python 初始化错误与 13 条 `AutomationTest: Condition failed`（UnifiedError 引擎测试）；Warning 为 297 条 TextLocalizationResource、21 条 EditorDataStorageUI、4 条无渲染 Niagara `SpawnSystemAttached` Script Warning、3 条 Sockets、1 条 CrowdFollowing。Fatal、Ensure、断言、Blueprint Runtime Error、`Accessed None` 均为 0。与历史无界面运行类别一致，**不能视为日志清洁通过**。
+- `git diff --check` 通过。未执行有渲染 PIE、真实键鼠／手柄输入和画面验收；调用了改动后重复通知路径的 `validate_reward_multiplayer.py` / 击杀积累双人回归本轮未运行，Editor 测试桥接中的重复消息广播仅完成编译验证。其余历史结论不因本轮通过。
+
 ## 设计器 AddWidget 组合血量子控件（2026-11-04）
 
 - 参考 `W_PlayerTile` 与 `W_TopDownArenaHUDLayout` 的关系，血量子控件改为由 HUD 蓝图在设计器中持有：`W_MonsterArenaHUD` 的 `CoreHealthSlot`（NamedSlot）内通过 UMG Add Widget 放入 `CoreHealthDisplay`（`W_MonsterArenaCoreHealth`）。Runtime 不再使用 `CreateWidget`／`SetContent` 创建或挂载；`UMonsterArenaHUD` 仅以 `BindWidgetOptional` 绑定 `CoreHealthDisplay` 并传入权威血量快照。
